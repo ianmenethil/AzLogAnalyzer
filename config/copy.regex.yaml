@@ -1,0 +1,11 @@
+---
+AZDIAG_STRINGS:
+    - "/Online/Payment?version=v1"
+AZDIAG_PATTS:
+    - "/Home$"
+    - '\.css$'
+MATCH_VALUE_TO_SPECIFIC_COLUMN:
+    requestUri_s:
+        - "^/Demo$"
+    requestQuery_s:
+        - "^/Demo$"

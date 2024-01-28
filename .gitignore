@@ -1,0 +1,13 @@
+*.txt
+*.csv
+*.log
+*.json
+*.xlsx
+Backup/
+Keep/
+KQL/
+AZLOGS/
+config/config.yaml
+config/regex.yaml
+config/columns.yaml
+__pycache__/
