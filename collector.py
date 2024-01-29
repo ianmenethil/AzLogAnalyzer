@@ -36,40 +36,74 @@ CL_LocalTime: str = 'LocalTime'
 DELALL_FEXT: Tuple[str, str, str, str] = ('.csv', '.xlsx', '.log', '.txt')
 
 
-def load_configurations():
-    """The function "load_configurations" returns three objects: an excelConfigurator object, a
-    regexConfigurator object, and the result of loading a configuration from a file."""
-    config_keys = ['CL_INIT_ORDER', 'CL_DROPPED', 'CL_FINAL_ORDER', 'EXCLUSION_PAIRS']
-    regex_keys = ['AZDIAG_PATTS', 'AZDIAG_STRINGS', 'MATCH_VALUE_TO_SPECIFIC_COLUMN']
-    return excelConfigurator(config_keys), regexConfigurator(regex_keys), load_config_from_file()
+class ConfigLoader():
+
+    @staticmethod
+    def load_configurations():
+        """The function "load_configurations" returns three objects: an excelConfigurator object, a
+        regexConfigurator object, and the result of loading a configuration from a file."""
+        config_keys = ['CL_INIT_ORDER', 'CL_DROPPED', 'CL_FINAL_ORDER', 'EXCLUSION_PAIRS']
+        regex_keys = ['AZDIAG_PATTS', 'AZDIAG_STRINGS', 'MATCH_VALUE_TO_SPECIFIC_COLUMN']
+        return excelConfigurator(config_keys), regexConfigurator(regex_keys), load_config_from_file()
 
 
-def find_duplicate_columns(df) -> Any:
-    """The function `find_duplicate_columns` takes a DataFrame as input and returns a list of duplicate
-    column names."""
-    duplicate_columns = df.columns[df.columns.duplicated()]
-    logger.info(f"Duplicate columns: {duplicate_columns.tolist()}")
-    return duplicate_columns.tolist()
+class DataFrameUtilities():
+
+    @staticmethod
+    def find_duplicate_columns(df) -> Any:
+        """The function `find_duplicate_columns` takes a DataFrame as input and returns a list of duplicate
+        column names."""
+        duplicate_columns = df.columns[df.columns.duplicated()]
+        logger.info(f"Duplicate columns: {duplicate_columns.tolist()}")
+        return duplicate_columns.tolist()
 
 
-def get_current_time_info() -> dict[str, Any]:
-    """The function `get_current_time_info` returns a dictionary containing the current time information in
-    Sydney and in UTC."""
-    utc_zone = pytz.utc
-    sydney_zone = pytz.timezone('Australia/Sydney')
-    utc_now = datetime.now(utc_zone)
-    sydney_now = utc_now.astimezone(sydney_zone)
-    return {
-        'NOWINSYDNEY': sydney_now.strftime('%d-%m-%y %H:%M:%S'),
-        'NOWINAZURE': utc_now,
-        'TODAY': sydney_now.strftime('%d-%m-%y'),
-        'NOWINSYDNEY_FILEFORMAT': sydney_now.strftime("%Y-%m-%d_%H-%M-%S"),
-        'NOWINAZURE_FILEFORMAT': utc_now.strftime("%Y-%m-%d_%H-%M-%S")
-    }
+class TimeUtils():
+
+    @staticmethod
+    def get_current_time_info() -> dict[str, Any]:
+        """The function `get_current_time_info` returns a dictionary containing the current time information in
+        Sydney and in UTC."""
+        utc_zone = pytz.utc
+        sydney_zone = pytz.timezone('Australia/Sydney')
+        utc_now = datetime.now(utc_zone)
+        sydney_now = utc_now.astimezone(sydney_zone)
+        return {
+            'NOWINSYDNEY': sydney_now.strftime('%d-%m-%y %H:%M:%S'),
+            'NOWINAZURE': utc_now,
+            'TODAY': sydney_now.strftime('%d-%m-%y'),
+            'NOWINSYDNEY_FILEFORMAT': sydney_now.strftime("%Y-%m-%d_%H-%M-%S"),
+            'NOWINAZURE_FILEFORMAT': utc_now.strftime("%Y-%m-%d_%H-%M-%S")
+        }
+
+    @staticmethod
+    def is_date_string(s, date_format) -> bool:  # for backups
+        """Check if the string s matches the date_format."""
+        try:
+            datetime.strptime(s, date_format)
+            return True
+        except ValueError:
+            return False
+
+    @staticmethod
+    def validate_time_format_AZURE(time_str) -> bool:
+        """Validate if the input string matches Azure's expected date-time formats."""
+        try:
+            # Attempt to parse the datetime string
+            parsed_time = parser.parse(time_str)
+            logger.info(f"Validated and parsed time: {parsed_time.isoformat()}")
+            return True
+        except ValueError:
+            return False
+
+    @staticmethod
+    def validate_time_format(time_str) -> bool:
+        """Validates if the time string includes a time unit (m, h, d, w). Returns True if valid, False otherwise."""
+        return bool(re.match(r'^\d+[mhdw]$', time_str))
 
 
 # ! TIME
-time_info = get_current_time_info()
+time_info = TimeUtils.get_current_time_info()
 NOWINSYDNEY: str = time_info['NOWINSYDNEY']
 NOWINAZURE: str = time_info['NOWINAZURE']
 TODAY: str = time_info['TODAY']
@@ -83,10 +117,9 @@ class APIManager():
 
     @staticmethod
     def get_logs_from_azure_analytics(query, headers, zen_endpoint) -> Any | dict:  # ! API call to get logs
-        """
-        The `get_logs_from_azure_analytics` function makes an API call to retrieve logs from Azure Analytics
-        and returns the response as a JSON object.
-        """
+        """The `get_logs_from_azure_analytics` function makes an API call to retrieve logs from Azure Analytics
+        and returns the response as a JSON object."""
+
         try:
             logger.info(f"Log endpoint:{zen_endpoint}")
             json.dumps(headers)
@@ -145,13 +178,12 @@ class APIManager():
         token_file_path: str = '',
         json_file_path: str = '',
         endpoint: str = ''
-    ) -> tuple[Literal['Error in token'], Any |
-               Literal['AZDIAG_IP1IP2TIMEAGO', 'AZDIAG_TIMEAGO', 'AZDIAG_TIMEBETWEEN', 'APPREQ_TIMEAGO', 'APPPAGE_TIMEAGO', 'APPBROWSER_TIMEAGO',
-                       'APPSERVHTTPLogs_TIMEAGO', 'APPSERVIPSecTIMEAGO']] | tuple[Any | dict[
-                           Any, Any], Any | Literal['AZDIAG_IP1IP2TIMEAGO', 'AZDIAG_TIMEAGO', 'AZDIAG_TIMEBETWEEN', 'APPREQ_TIMEAGO',
-                                                    'APPPAGE_TIMEAGO', 'APPBROWSER_TIMEAGO', 'APPSERVHTTPLogs_TIMEAGO', 'APPSERVIPSecTIMEAGO']]:
+    ) -> tuple[Literal['Error in token'], Any | Literal['AZDIAG_IP1IP2TIMEAGO', 'AZDIAG_TIMEAGO', 'AZDIAG_TIMEBETWEEN', 'APPREQ_TIMEAGO', 'APPPAGE_TIMEAGO', 'APPBROWSER_TIMEAGO',
+                                                        'APPSERVHTTPLogs_TIMEAGO', 'APPSERVIPSecTIMEAGO']] | tuple[Any | dict[
+                                                            Any, Any], Any | Literal['AZDIAG_IP1IP2TIMEAGO', 'AZDIAG_TIMEAGO', 'AZDIAG_TIMEBETWEEN', 'APPREQ_TIMEAGO',
+                                                                                     'APPPAGE_TIMEAGO', 'APPBROWSER_TIMEAGO', 'APPSERVHTTPLogs_TIMEAGO', 'APPSERVIPSecTIMEAGO']]:
         """The function fetches and saves API data using a token and query, and handles errors."""
-        query_name, query_content = get_query_input()
+        query_name, query_content = UserInputHandler.get_query_input()
         KQL = json.dumps({"query": query_content})
         logger.info(f'Active [yellow]Query Name:[/yellow] [red]{query_name}[/red]')
         logger.warning('Active [yellow]Query:[/yellow]')
@@ -186,6 +218,28 @@ class APIManager():
 class FileHandler():
 
     @staticmethod
+    def remove_files_from_folder(folder, file_extension) -> None:
+        """Removes files with a specific file extension from a given folder.
+        Args:folder (str): The path to the folder from which files will be removed.
+            file_extension (str or Tuple[str]): The file extension(s) of the files to be removed."""
+        try:
+            files_to_remove = []
+            for datafiles in os.listdir(folder):
+                if datafiles.endswith(file_extension):
+                    filepath = os.path.join(folder, datafiles)
+                    if os.path.exists(filepath):
+                        files_to_remove.append(datafiles)
+                    else:
+                        logger.warning(f"File not found: {datafiles}")
+            for datafiles in files_to_remove:
+                filepath = os.path.join(folder, datafiles)
+                os.remove(filepath)
+            logger.info(f"Removed {len(files_to_remove)} files from {folder}")
+            jprint(files_to_remove)
+        except Exception as e:
+            logger.error(f'Error in remove_files_from_folder: {e}', exc_info=True, stack_info=True, extra={'color': 'red'}, stacklevel=2)
+
+    @staticmethod
     def save_json(data: Any, filename: str) -> None:
         """The `save_json` function saves data as a JSON file with error handling."""
         try:
@@ -213,11 +267,11 @@ class FileHandler():
                 for table in json_data['tables']:
                     logger.debug(f"Table name: {table['name']}")
                     df = pd.DataFrame(table['rows'], columns=[col['name'] for col in table['columns']])
-                    find_duplicate_columns(df)
+                    DataFrameUtilities.find_duplicate_columns(df)
                     dataframe_row_length = len(df)
                     dataframe_column_length = len(df.columns)
                     logger.info(f'DataFrame Rows: {dataframe_row_length} - DataFrame Columns: {dataframe_column_length}')
-                    df = Manipulations.processExclusionPairs(df, filename, exclusion_pairs, log_file)
+                    df = DataFrameManipulator.processExclusionPairs(df, filename, exclusion_pairs, log_file)
                     logger.info("Proces exclusion pairs completed.")
                     if df is None:
                         logger.warning("DataFrame is empty. Exiting")
@@ -231,7 +285,7 @@ class FileHandler():
                     original_list_of_columns = df.columns.tolist()
                     original_list_of_columns_count = len(original_list_of_columns)
                     df.dropna(axis=1, how='all', inplace=True)
-                    find_duplicate_columns(df)
+                    DataFrameUtilities.find_duplicate_columns(df)
                     logger.info(f'Original col count {original_list_of_columns_count} - After dropna col count {len(df.columns.tolist())}')
                     logger.debug(f'Dropped: {len(original_list_of_columns) - len(df.columns.tolist())} columns')
                     after_drop_list_of_columns = df.columns.tolist()
@@ -243,7 +297,7 @@ class FileHandler():
                     else:
                         logger.info('No cols dropped')
                     df.to_csv(filename, index=False, encoding='utf-8')
-                    find_duplicate_columns(df)
+                    DataFrameUtilities.find_duplicate_columns(df)
                     return True
             else:
                 logger.warning("No tables found in response.")
@@ -278,7 +332,7 @@ class FileHandler():
             new_order += rest_columns
 
             # ! Optional, for debugging
-            duplicate_cols = find_duplicate_columns(df[new_order])
+            duplicate_cols = DataFrameUtilities.find_duplicate_columns(df[new_order])
             if duplicate_cols:
                 logger.info(f"Duplicate columns after reordering: {duplicate_cols}")
             else:
@@ -325,8 +379,7 @@ class FileHandler():
                 log_data += "Removed Row:"  # ! Append the removed row to the log data
                 log_data += "\n"
                 log_data += f"{row[column]}"  # ! Append the removed row to the log data
-                additional_columns = [KEYSEARCH_requestQuery_s, KEYSEARCH_originalRequestUriWithArgs_s,
-                                      KEYSEARCH_requestUri_s]  # ! Define additional columns to capture
+                additional_columns = [KEYSEARCH_requestQuery_s, KEYSEARCH_originalRequestUriWithArgs_s, KEYSEARCH_requestUri_s]  # ! Define additional columns to capture
                 additional_info = []
                 for col in additional_columns:
                     if col in row:
@@ -338,7 +391,7 @@ class FileHandler():
             logger.error(f'E in save_removed_rows_to_raw_logs: {e}', exc_info=True, stack_info=True)
 
 
-class Manipulations():
+class DataFrameManipulator():
 
     @staticmethod
     def processExclusionPairs(df: pd.DataFrame, filename: str, exclusion_pairs, log_file: str):
@@ -406,8 +459,8 @@ class Manipulations():
             logger.debug(regex_json_formatted)
             logger.debug('\nString patterns:')
             logger.debug(string_json_formatted)
-            df = Manipulations.remove_regex_patterns(df, regex, string, columns_to_search, extraction_file)
-            df = Manipulations.remove_key_value_patterns(df, key_col_to_val_patts, extraction_file)
+            df = DataFrameManipulator.remove_regex_patterns(df, regex, string, columns_to_search, extraction_file)
+            df = DataFrameManipulator.remove_key_value_patterns(df, key_col_to_val_patts, extraction_file)
             output += f"\nTotal rows Total Removed: {total_removed}:\nRemaining Rows: {len(df)}\n"
             return df
         except Exception as e:
@@ -474,18 +527,18 @@ class Manipulations():
         return df
 
 
-class ExcelOperations():
+class ExcelManager():
 
     @staticmethod
     def excelCreate(input_csv_file, output_excel_file, extraction_log_file, regex_patterns, string_patterns, col_to_val_patterns) -> None:
         """The function `excelCreate` reads a CSV file, removes specified patterns from the data, drops columns with all NaN values, and creates an Excel file with the formatted data."""
         try:
             df = pd.read_csv(input_csv_file)
-            df = Manipulations.remove_patterns(dataframe=df,
-                                               extraction_file=extraction_log_file,
-                                               regex=regex_patterns,
-                                               string=string_patterns,
-                                               key_col_to_val_patts=col_to_val_patterns)
+            df = DataFrameManipulator.remove_patterns(dataframe=df,
+                                                      extraction_file=extraction_log_file,
+                                                      regex=regex_patterns,
+                                                      string=string_patterns,
+                                                      key_col_to_val_patts=col_to_val_patterns)
 
             logger.info(f'Captured Logs: {extraction_log_file} - Rows: {df.shape[0]} - Col: {df.shape[1]}')
             original_list_of_columns = df.columns.tolist()
@@ -497,7 +550,7 @@ class ExcelOperations():
             if not df.empty:
                 with pd.ExcelWriter(output_excel_file, engine='xlsxwriter') as writer:  # pylint: disable=abstract-class-instantiated
                     df.to_excel(writer, index=False, sheet_name='Sheet1')
-                    ExcelOperations.format_excel_file(writer, df)
+                    ExcelManager.format_excel_file(writer, df)
                     logger.debug(f'Excel formatted and created: {output_excel_file}')
             else:
                 logger.warning('Dataframe is empty')
@@ -579,8 +632,7 @@ class ExcelOperations():
                 logger.info('[green]Columns to be dropped ended: [/green]')
             return df
 
-        def apply_final_column_order_and_save(df: pd.DataFrame, final_column_order: List[str], output_file: str,
-                                              available_columns_before_drop: set) -> None:
+        def apply_final_column_order_and_save(df: pd.DataFrame, final_column_order: List[str], output_file: str, available_columns_before_drop: set) -> None:
             """The function `apply_final_column_order_and_save` takes a DataFrame, a list of column names, an
             output file path, and a set of available columns as input, applies the specified column order to the
             DataFrame, saves the DataFrame to an Excel file, and logs the process."""
@@ -646,9 +698,7 @@ class ExcelOperations():
                 'include_names': True
             },
             'rulesD': {
-                'cols': [
-                    'engine_s', 'ruleSetVersion_s', 'ruleGroup_s', 'ruleId_s', 'ruleSetType_s', 'policyId_s', 'policyScope_s', 'policyScopeName_s'
-                ],
+                'cols': ['engine_s', 'ruleSetVersion_s', 'ruleGroup_s', 'ruleId_s', 'ruleSetType_s', 'policyId_s', 'policyScope_s', 'policyScopeName_s'],
                 'include_names': True
             },
             'serverD': {
@@ -661,8 +711,8 @@ class ExcelOperations():
             },
             'TimeGenerated_eventD': {
                 'cols': [
-                    'eventTimestamp_s', 'errorMessage_s', 'errorCount_d', 'Environment_s', 'Region_s', 'ActivityName_s', 'operationalResult_s',
-                    'ActivityId_g', 'ScaleUnit_s', 'NamespaceName_s'
+                    'eventTimestamp_s', 'errorMessage_s', 'errorCount_d', 'Environment_s', 'Region_s', 'ActivityName_s', 'operationalResult_s', 'ActivityId_g', 'ScaleUnit_s',
+                    'NamespaceName_s'
                 ],
                 'include_names': True
             },
@@ -670,11 +720,11 @@ class ExcelOperations():
         logger.debug('[red]########## Final Excel Creation Started #########[/red]')
         logger.debug(f'Dataframe loaded from file: {input_file}')
         logger.debug(f'Total Columns: {df_total_columns} - Total Rows: {df_total_rows}')
-        df = Manipulations.remove_patterns(dataframe=df,
-                                           extraction_file=extraction_log_file,
-                                           regex=regex_patterns,
-                                           string=string_patterns,
-                                           key_col_to_val_patts=col_to_val_patterns)
+        df = DataFrameManipulator.remove_patterns(dataframe=df,
+                                                  extraction_file=extraction_log_file,
+                                                  regex=regex_patterns,
+                                                  string=string_patterns,
+                                                  key_col_to_val_patts=col_to_val_patterns)
         logger.info('Manipulations.remove_patterns completed')
         # ! Section 2
         drop_and_create_columns(df, new_columns)
@@ -712,7 +762,91 @@ class AppConfigurations(TypedDict):
     AZLOG_ZEN_ENDPOINT: str
 
 
-class BackupConfigurator():
+class SystemUtils():
+
+    @staticmethod
+    def check_and_modify_permissions(path) -> None:
+        """Check and modify the permissions of the given path.
+        Args: path: The path to check and modify permissions for."""
+        try:
+            if not os.access(path, os.W_OK):
+                logger.info(f"Write permission not enabled on {path}. Attempting to modify.")
+                current_permissions = stat.S_IMODE(os.lstat(path).st_mode)
+                os.chmod(path, current_permissions | stat.S_IWUSR)
+                logger.info(f"Write permission added to {path}.")
+            else:
+                logger.info(f"Write permission is enabled on {path}.")
+        except Exception as e:
+            logger.info(f"Error modifying permissions: {e}", exc_info=True, stack_info=True, extra={'color': 'red'}, stacklevel=2)
+            logger.error(f"Error modifying permissions for {path}: {e}", exc_info=True, stack_info=True, extra={'color': 'red'}, stacklevel=2)
+
+
+class QueryFormatter():
+
+    @staticmethod
+    def format_query(query_name, ip1=None, ip2=None, timeago=None, iplist=None, start_t=None, end_t=None) -> str:  # pylint: disable=unused-argument # noqa: W0613
+        """Formats a query based on the given parameters.
+        Parameters:
+        - query_name: The name of the query.
+        - ip1: The value for IP1 (optional).
+        - ip2: The value for IP2 (optional).
+        - timeago: The value for TIMEAGO (optional).
+        - iplist: The list of IPs (optional).
+        - start_t: The start time (optional).
+        - end_t: The end time (optional).
+        Returns:
+        - str: The formatted query."""
+        query_param_map = {
+            "AZDIAG_IP1IP2TIMEAGO": {
+                "IP1": ip1,
+                "IP2": ip2,
+                "TIME": timeago
+            },
+            "AZDIAG_TIMEBETWEEN": {
+                "STARTTIME": start_t,
+                "ENDTIME": end_t
+            },
+            "AZDIAG_TIMEAGO": {
+                "TIME": timeago
+            },
+            "APPREQ_TIMEAGO": {
+                "TIME": timeago
+            },
+            "APPPAGE_TIMEAGO": {
+                "TIME": timeago
+            },
+            "APPBROWSER_TIMEAGO": {
+                "TIME": timeago
+            },
+            "APPSERVHTTPLogs_TIMEAGO": {
+                "TIME": timeago
+            },
+            "APPSERVIPSecTIMEAGO": {
+                "TIME": timeago
+            },
+        }
+
+        formatted_query_name = f"RAW_{query_name}"
+        if formatted_query_name in raw_kql_queries:
+            query_template = raw_kql_queries[formatted_query_name]
+            query_params = query_param_map.get(query_name, {})
+            return query_template.format(**query_params)
+        logger.error(f'Active [yellow]Query Name:[/yellow] [red]{query_name}[/red] not found')
+        return 'Not Found'
+
+
+class BackupManager():
+
+    @staticmethod
+    def get_date_folders(input_dir, date_format='%d-%m-%y') -> list[Any]:  # for backups
+        """Identify and return folders that match the given date format in their name."""
+        date_folders = []
+        for root, dirs, _ in os.walk(input_dir):
+            for dir_name in dirs:
+                if TimeUtils.is_date_string(dir_name, date_format):
+                    folder_path = os.path.join(root, dir_name)
+                    date_folders.append(folder_path)
+        return date_folders
 
     @staticmethod
     def copy_log_file(source_file, destination_file) -> LiteralString | Literal['Error: Log file not found']:
@@ -734,7 +868,7 @@ class BackupConfigurator():
     def create_backups(input_dir, backup_dir, query_name) -> None:
         """The `create_backups` function creates backups of specific file types in a given input directory,
         using a unique filename based on the current timestamp and other parameters."""
-        check_and_modify_permissions(backup_dir)
+        SystemUtils.check_and_modify_permissions(backup_dir)
         extensions_to_copy = ['.csv', '.json', '.xlsx', '.log', '.txt']
         files = os.listdir(input_dir)
         logger.info(f'input_dir {input_dir} - backup_dir {backup_dir}')
@@ -780,7 +914,7 @@ class BackupConfigurator():
         backup_folders = [folder for folder, _, _ in os.walk(input_dir) if os.path.isdir(folder) and folder != input_dir]
         logger.debug(f'backup_folders: {backup_folders}')
         date_format = '%d-%m-%y'
-        date_folders = get_date_folders(input_dir, date_format)
+        date_folders = BackupManager.get_date_folders(input_dir, date_format)
 
         for folder in date_folders:
             try:
@@ -825,272 +959,161 @@ class BackupConfigurator():
         try:
             SRC_LOG_FILE = f'{LOG_FOLDER}/applogs.log'
             DEST_LOG_FILE = f'{backup_dir}/applogs.log'
-            BackupConfigurator.create_backups(input_dir=output_folder, backup_dir=backup_dir, query_name=query_name)
+            BackupManager.create_backups(input_dir=output_folder, backup_dir=backup_dir, query_name=query_name)
             logger.info(f'Backup completed: {backup_dir}')
-            BackupConfigurator.store_old_backups(input_dir=output_folder, days_threshold=7)
+            BackupManager.store_old_backups(input_dir=output_folder, days_threshold=7)
             logger.info(f'Old backups stored: {output_folder}')
-            BackupConfigurator.copy_log_file(source_file=SRC_LOG_FILE, destination_file=DEST_LOG_FILE)
+            BackupManager.copy_log_file(source_file=SRC_LOG_FILE, destination_file=DEST_LOG_FILE)
             logger.info(f'copy_log_file: {SRC_LOG_FILE} to {DEST_LOG_FILE}')
         except Exception as err:
             logger.error(f'Error in manage_backups: {err}')
 
 
-def remove_files_from_folder(folder, file_extension) -> None:
-    """Removes files with a specific file extension from a given folder.
-    Args:folder (str): The path to the folder from which files will be removed.
-        file_extension (str or Tuple[str]): The file extension(s) of the files to be removed."""
-    try:
-        files_to_remove = []
-        for datafiles in os.listdir(folder):
-            if datafiles.endswith(file_extension):
-                filepath = os.path.join(folder, datafiles)
-                if os.path.exists(filepath):
-                    files_to_remove.append(datafiles)
-                else:
-                    logger.warning(f"File not found: {datafiles}")
-        for datafiles in files_to_remove:
-            filepath = os.path.join(folder, datafiles)
-            os.remove(filepath)
-        logger.info(f"Removed {len(files_to_remove)} files from {folder}")
-        jprint(files_to_remove)
-    except Exception as e:
-        logger.error(f'Error in remove_files_from_folder: {e}', exc_info=True, stack_info=True, extra={'color': 'red'}, stacklevel=2)
+class DataProcessor():
+
+    @staticmethod
+    def process_data(AZDIAG_JSON_FILEPATH_STR, AZDIAG_CSV_FILEPATH_STR, AZDIAG_EXTRACTIONLOGS_FILEPATH_STR, AZDIAG_EXCEL_FILEPATH, AZDIAG_EXCEL_FINAL_FILEPATH, CL_INIT_ORDER,
+                     CL_DROPPED, AZDIAG_REGEX, AZDIAG_STRINGS, MATCH_VALUE_TO_SPECIFIC_COLUMN, EXCLUSION_PAIRS, CL_FINAL_ORDER) -> None:
+        """Process data by reading JSON data, saving tables as CSV files, adding a local time column, creating an Excel file, and creating a final Excel file.
+        Args: AZDIAG_JSON_FILEPATH_STR (str): File path of the JSON data.
+            AZDIAG_CSV_FILEPATH_STR (str): File path to save the CSV file.
+            AZDIAG_EXTRACTIONLOGS_FILEPATH_STR (str): File path to save extraction logs.
+            AZDIAG_EXCEL_FILEPATH (str): File path to save the initial Excel file.
+            AZDIAG_EXCEL_FINAL_FILEPATH (str): File path to save the final Excel file.
+            CL_INIT_ORDER (List[str]): List of column names for initial column order.
+            CL_DROPPED (List[str]): List of column names to be dropped.
+            AZDIAG_REGEX (Dict[str, str]): Dictionary of regex patterns.
+            AZDIAG_STRINGS (Dict[str, str]): Dictionary of string patterns.
+            MATCH_VALUE_TO_SPECIFIC_COLUMN (Dict[str, str]): Dictionary of column-value patterns.
+            EXCLUSION_PAIRS (Dict[str, str]): Dictionary of exclusion pairs.
+            CL_FINAL_ORDER (List[str]): List of column names for final column order."""
+        try:
+            json_data = FileHandler.read_json(filename=AZDIAG_JSON_FILEPATH_STR)
+            if 'tables' in json_data:
+                saveData = FileHandler.saveTablesResponseToCSV(json_data=json_data,
+                                                               filename=AZDIAG_CSV_FILEPATH_STR,
+                                                               exclusion_pairs=EXCLUSION_PAIRS,
+                                                               log_file=AZDIAG_EXTRACTIONLOGS_FILEPATH_STR)
+                if saveData:
+                    FileHandler.read_csv_add_LT_col_write_csv(input_file=AZDIAG_CSV_FILEPATH_STR,
+                                                              source_col=CL_TimeGenerated,
+                                                              dest_col=CL_LocalTime,
+                                                              output_file=AZDIAG_CSV_FILEPATH_STR,
+                                                              dropped_cols=CL_DROPPED,
+                                                              initOrder_cols=CL_INIT_ORDER)
+                    logger.debug(f'LT column added to {AZDIAG_CSV_FILEPATH_STR}')
+
+                    logger.debug(f'excelCreate: Input {AZDIAG_CSV_FILEPATH_STR} | Output {AZDIAG_EXCEL_FILEPATH}')
+                    ExcelManager.excelCreate(input_csv_file=AZDIAG_CSV_FILEPATH_STR,
+                                             output_excel_file=AZDIAG_EXCEL_FILEPATH,
+                                             extraction_log_file=AZDIAG_EXTRACTIONLOGS_FILEPATH_STR,
+                                             regex_patterns=AZDIAG_REGEX,
+                                             string_patterns=AZDIAG_STRINGS,
+                                             col_to_val_patterns=MATCH_VALUE_TO_SPECIFIC_COLUMN)
+                    logger.debug(f'excelCreate: Input {AZDIAG_CSV_FILEPATH_STR} | Output {AZDIAG_EXCEL_FILEPATH}')
+
+                    try:
+                        logger.debug(f'createFinalExcel: Input {AZDIAG_EXCEL_FILEPATH} | Output {AZDIAG_EXCEL_FINAL_FILEPATH}')
+                        ExcelManager.createFinalExcel(input_file=AZDIAG_EXCEL_FILEPATH,
+                                                      output_file=AZDIAG_EXCEL_FINAL_FILEPATH,
+                                                      extraction_log_file=AZDIAG_EXTRACTIONLOGS_FILEPATH_STR,
+                                                      columns_to_be_dropped=CL_DROPPED,
+                                                      final_column_order=CL_FINAL_ORDER,
+                                                      regex_patterns=AZDIAG_REGEX,
+                                                      string_patterns=AZDIAG_STRINGS,
+                                                      col_to_val_patterns=MATCH_VALUE_TO_SPECIFIC_COLUMN)
+                        logger.debug(f'createFinalExcel: Input {AZDIAG_EXCEL_FILEPATH} | Output {AZDIAG_EXCEL_FINAL_FILEPATH}')
+                    except Exception as e:
+                        logger.error(f'E in createFinalExcel: {e}', exc_info=True, stack_info=True, extra={'color': 'red'}, stacklevel=2)
+        except Exception as e:
+            logger.error(f'E in process_local_data: {e}', exc_info=True, stack_info=True, extra={'color': 'red'}, stacklevel=2)
 
 
-def process_data(AZDIAG_JSON_FILEPATH_STR, AZDIAG_CSV_FILEPATH_STR, AZDIAG_EXTRACTIONLOGS_FILEPATH_STR, AZDIAG_EXCEL_FILEPATH,
-                 AZDIAG_EXCEL_FINAL_FILEPATH, CL_INIT_ORDER, CL_DROPPED, AZDIAG_REGEX, AZDIAG_STRINGS, MATCH_VALUE_TO_SPECIFIC_COLUMN,
-                 EXCLUSION_PAIRS, CL_FINAL_ORDER) -> None:
-    """Process data by reading JSON data, saving tables as CSV files, adding a local time column, creating an Excel file, and creating a final Excel file.
-    Args: AZDIAG_JSON_FILEPATH_STR (str): File path of the JSON data.
-        AZDIAG_CSV_FILEPATH_STR (str): File path to save the CSV file.
-        AZDIAG_EXTRACTIONLOGS_FILEPATH_STR (str): File path to save extraction logs.
-        AZDIAG_EXCEL_FILEPATH (str): File path to save the initial Excel file.
-        AZDIAG_EXCEL_FINAL_FILEPATH (str): File path to save the final Excel file.
-        CL_INIT_ORDER (List[str]): List of column names for initial column order.
-        CL_DROPPED (List[str]): List of column names to be dropped.
-        AZDIAG_REGEX (Dict[str, str]): Dictionary of regex patterns.
-        AZDIAG_STRINGS (Dict[str, str]): Dictionary of string patterns.
-        MATCH_VALUE_TO_SPECIFIC_COLUMN (Dict[str, str]): Dictionary of column-value patterns.
-        EXCLUSION_PAIRS (Dict[str, str]): Dictionary of exclusion pairs.
-        CL_FINAL_ORDER (List[str]): List of column names for final column order."""
-    try:
-        json_data = FileHandler.read_json(filename=AZDIAG_JSON_FILEPATH_STR)
-        if 'tables' in json_data:
-            saveData = FileHandler.saveTablesResponseToCSV(json_data=json_data,
-                                                           filename=AZDIAG_CSV_FILEPATH_STR,
-                                                           exclusion_pairs=EXCLUSION_PAIRS,
-                                                           log_file=AZDIAG_EXTRACTIONLOGS_FILEPATH_STR)
-            if saveData:
-                FileHandler.read_csv_add_LT_col_write_csv(input_file=AZDIAG_CSV_FILEPATH_STR,
-                                                          source_col=CL_TimeGenerated,
-                                                          dest_col=CL_LocalTime,
-                                                          output_file=AZDIAG_CSV_FILEPATH_STR,
-                                                          dropped_cols=CL_DROPPED,
-                                                          initOrder_cols=CL_INIT_ORDER)
-                logger.debug(f'LT column added to {AZDIAG_CSV_FILEPATH_STR}')
+class UserInputHandler():
 
-                logger.debug(f'excelCreate: Input {AZDIAG_CSV_FILEPATH_STR} | Output {AZDIAG_EXCEL_FILEPATH}')
-                ExcelOperations.excelCreate(input_csv_file=AZDIAG_CSV_FILEPATH_STR,
-                                            output_excel_file=AZDIAG_EXCEL_FILEPATH,
-                                            extraction_log_file=AZDIAG_EXTRACTIONLOGS_FILEPATH_STR,
-                                            regex_patterns=AZDIAG_REGEX,
-                                            string_patterns=AZDIAG_STRINGS,
-                                            col_to_val_patterns=MATCH_VALUE_TO_SPECIFIC_COLUMN)
-                logger.debug(f'excelCreate: Input {AZDIAG_CSV_FILEPATH_STR} | Output {AZDIAG_EXCEL_FILEPATH}')
+    @staticmethod
+    def select_query(
+    ) -> Any | Literal['AZDIAG_IP1IP2TIMEAGO', 'AZDIAG_TIMEAGO', 'APPREQ_TIMEAGO', 'APPPAGE_TIMEAGO', 'APPBROWSER_TIMEAGO', 'APPSERVHTTPLogs_TIMEAGO', 'APPSERVIPSecTIMEAGO']:
+        """Selects a query from a list of options and returns the chosen query."""
+        logger.info('Select query')
+        logger.info('1. AZDIAG_IP1IP2TIMEAGO')
+        logger.info('2. AZDIAG_TIMEAGO')
+        logger.info('3. AZDIAG_TIMEBETWEEN')
+        logger.info('4. APPREQ_TIMEAGO')
+        logger.info('5. APPPAGE_TIMEAGO')
+        logger.info('6. APPBROWSER_TIMEAGO')
+        logger.info('7. APPSERVHTTPLogs_TIMEAGO')
+        logger.info('8. APPSERVIPSecTIMEAGO')
+        logger.info('9. Exit')
+        query = input('Select query: ')
+        if query == '1':
+            return a
+        elif query == '2':
+            return a1
+        elif query == '3':
+            return a2
+        elif query == '4':
+            return a3
+        elif query == '5':
+            return a4
+        elif query == '6':
+            return a5
+        elif query == '7':
+            return a6
+        elif query == '8':
+            return a7
+        elif query == '9':
+            sys.exit()
+        logger.info('Wrong query, try again')
+        return UserInputHandler.select_query()
 
-                try:
-                    logger.debug(f'createFinalExcel: Input {AZDIAG_EXCEL_FILEPATH} | Output {AZDIAG_EXCEL_FINAL_FILEPATH}')
-                    ExcelOperations.createFinalExcel(input_file=AZDIAG_EXCEL_FILEPATH,
-                                                     output_file=AZDIAG_EXCEL_FINAL_FILEPATH,
-                                                     extraction_log_file=AZDIAG_EXTRACTIONLOGS_FILEPATH_STR,
-                                                     columns_to_be_dropped=CL_DROPPED,
-                                                     final_column_order=CL_FINAL_ORDER,
-                                                     regex_patterns=AZDIAG_REGEX,
-                                                     string_patterns=AZDIAG_STRINGS,
-                                                     col_to_val_patterns=MATCH_VALUE_TO_SPECIFIC_COLUMN)
-                    logger.debug(f'createFinalExcel: Input {AZDIAG_EXCEL_FILEPATH} | Output {AZDIAG_EXCEL_FINAL_FILEPATH}')
-                except Exception as e:
-                    logger.error(f'E in createFinalExcel: {e}', exc_info=True, stack_info=True, extra={'color': 'red'}, stacklevel=2)
-    except Exception as e:
-        logger.error(f'E in process_local_data: {e}', exc_info=True, stack_info=True, extra={'color': 'red'}, stacklevel=2)
+    @staticmethod
+    def input_datetime_with_validation(prompt) -> str:
+        """Prompt the user for a datetime input and validate or adjust it to a proper format."""
+        while True:
+            input_time = input(prompt)
+            if TimeUtils.validate_time_format_AZURE(input_time):
+                return parser.parse(input_time).isoformat()
+            else:
+                logger.info("Invalid format. Please use '2024-01-28T17:57:38Z' or '2024-01-28 17:55:38.994534+00:00' or '2024-01-28T17:57:35.703683Z'.")
 
-
-def check_and_modify_permissions(path) -> None:
-    """Check and modify the permissions of the given path.
-    Args: path: The path to check and modify permissions for."""
-    try:
-        if not os.access(path, os.W_OK):
-            logger.info(f"Write permission not enabled on {path}. Attempting to modify.")
-            current_permissions = stat.S_IMODE(os.lstat(path).st_mode)
-            os.chmod(path, current_permissions | stat.S_IWUSR)
-            logger.info(f"Write permission added to {path}.")
-        else:
-            logger.info(f"Write permission is enabled on {path}.")
-    except Exception as e:
-        logger.info(f"Error modifying permissions: {e}", exc_info=True, stack_info=True, extra={'color': 'red'}, stacklevel=2)
-        logger.error(f"Error modifying permissions for {path}: {e}", exc_info=True, stack_info=True, extra={'color': 'red'}, stacklevel=2)
-
-
-def is_date_string(s, date_format) -> bool:  # for backups
-    """Check if the string s matches the date_format."""
-    try:
-        datetime.strptime(s, date_format)
-        return True
-    except ValueError:
-        return False
-
-
-def get_date_folders(input_dir, date_format='%d-%m-%y') -> list[Any]:  # for backups
-    """Identify and return folders that match the given date format in their name."""
-    date_folders = []
-    for root, dirs, _ in os.walk(input_dir):
-        for dir_name in dirs:
-            if is_date_string(dir_name, date_format):
-                folder_path = os.path.join(root, dir_name)
-                date_folders.append(folder_path)
-    return date_folders
-
-
-def format_query(query_name, ip1=None, ip2=None, timeago=None, iplist=None, start_t=None, end_t=None) -> str:  # pylint: disable=unused-argument # noqa: W0613
-    """Formats a query based on the given parameters.
-    Parameters:
-    - query_name: The name of the query.
-    - ip1: The value for IP1 (optional).
-    - ip2: The value for IP2 (optional).
-    - timeago: The value for TIMEAGO (optional).
-    - iplist: The list of IPs (optional).
-    - start_t: The start time (optional).
-    - end_t: The end time (optional).
-    Returns:
-    - str: The formatted query."""
-    query_param_map = {
-        "AZDIAG_IP1IP2TIMEAGO": {
-            "IP1": ip1,
-            "IP2": ip2,
-            "TIME": timeago
-        },
-        "AZDIAG_TIMEBETWEEN": {
-            "STARTTIME": start_t,
-            "ENDTIME": end_t
-        },
-        "AZDIAG_TIMEAGO": {
-            "TIME": timeago
-        },
-        "APPREQ_TIMEAGO": {
-            "TIME": timeago
-        },
-        "APPPAGE_TIMEAGO": {
-            "TIME": timeago
-        },
-        "APPBROWSER_TIMEAGO": {
-            "TIME": timeago
-        },
-        "APPSERVHTTPLogs_TIMEAGO": {
-            "TIME": timeago
-        },
-        "APPSERVIPSecTIMEAGO": {
-            "TIME": timeago
-        },
-    }
-
-    formatted_query_name = f"RAW_{query_name}"
-    if formatted_query_name in raw_kql_queries:
-        query_template = raw_kql_queries[formatted_query_name]
-        query_params = query_param_map.get(query_name, {})
-        return query_template.format(**query_params)
-    logger.error(f'Active [yellow]Query Name:[/yellow] [red]{query_name}[/red] not found')
-    return 'Not Found'
-
-
-def select_query() -> Any | Literal['AZDIAG_IP1IP2TIMEAGO', 'AZDIAG_TIMEAGO', 'APPREQ_TIMEAGO', 'APPPAGE_TIMEAGO', 'APPBROWSER_TIMEAGO',
-                                    'APPSERVHTTPLogs_TIMEAGO', 'APPSERVIPSecTIMEAGO']:
-    """Selects a query from a list of options and returns the chosen query."""
-    logger.info('Select query')
-    logger.info('1. AZDIAG_IP1IP2TIMEAGO')
-    logger.info('2. AZDIAG_TIMEAGO')
-    logger.info('3. AZDIAG_TIMEBETWEEN')
-    logger.info('4. APPREQ_TIMEAGO')
-    logger.info('5. APPPAGE_TIMEAGO')
-    logger.info('6. APPBROWSER_TIMEAGO')
-    logger.info('7. APPSERVHTTPLogs_TIMEAGO')
-    logger.info('8. APPSERVIPSecTIMEAGO')
-    logger.info('9. Exit')
-    query = input('Select query: ')
-    if query == '1':
-        return a
-    elif query == '2':
-        return a1
-    elif query == '3':
-        return a2
-    elif query == '4':
-        return a3
-    elif query == '5':
-        return a4
-    elif query == '6':
-        return a5
-    elif query == '7':
-        return a6
-    elif query == '8':
-        return a7
-    elif query == '9':
-        sys.exit()
-    logger.info('Wrong query, try again')
-    return select_query()
-
-
-def validate_time_format_AZURE(time_str) -> bool:
-    """Validate if the input string matches Azure's expected date-time formats."""
-    try:
-        # Attempt to parse the datetime string
-        parsed_time = parser.parse(time_str)
-        logger.info(f"Validated and parsed time: {parsed_time.isoformat()}")
-        return True
-    except ValueError:
-        return False
-
-
-def validate_time_format(time_str) -> bool:
-    """Validates if the time string includes a time unit (m, h, d, w). Returns True if valid, False otherwise."""
-    return bool(re.match(r'^\d+[mhdw]$', time_str))
-
-
-def input_datetime_with_validation(prompt) -> str:
-    """Prompt the user for a datetime input and validate or adjust it to a proper format."""
-    while True:
-        input_time = input(prompt)
-        if validate_time_format_AZURE(input_time):
-            return parser.parse(input_time).isoformat()
-        else:
-            logger.info("Invalid format. Please use '2024-01-28T17:57:38Z' or '2024-01-28 17:55:38.994534+00:00' or '2024-01-28T17:57:35.703683Z'.")
-
-
-def get_query_input() -> tuple[Any | Literal['AZDIAG_IP1IP2TIMEAGO', 'AZDIAG_TIMEAGO', 'AZDIAG_TIMEBETWEEN', 'APPREQ_TIMEAGO', 'APPPAGE_TIMEAGO',
-                                             'APPBROWSER_TIMEAGO', 'APPSERVHTTPLogs_TIMEAGO', 'APPSERVIPSecTIMEAGO'], str]:
-    """Get user input for selecting and formatting a query.
-    Returns:tuple: A tuple containing the selected query name and the formatted query content."""
-    query_choice = select_query()
-    query_name = query_choice
-    ip1 = ip2 = None
-    if query_name == "AZDIAG_IP1IP2TIMEAGO":
-        ip1 = input('Enter value for IP1: ')
-        ip2 = input('Enter value for IP2: ')
-        timeago = input('Enter value for TIMEAGO (e.g., 10m, 2h, 1d): ')
-        while not validate_time_format(timeago):
-            logger.info('Invalid format. Please include (m)inutes, (h)ours, (d)ays, or (w)eeks. E.g., "10m" for 10 minutes.')
+    @staticmethod
+    def get_query_input() -> tuple[
+        Any | Literal[
+            'AZDIAG_IP1IP2TIMEAGO',
+            'AZDIAG_TIMEAGO',
+            'AZDIAG_TIMEBETWEEN',
+            'APPREQ_TIMEAGO',
+            'APPPAGE_TIMEAGO',
+            'APPBROWSER_TIMEAGO',  # ! Here
+            'APPSERVHTTPLogs_TIMEAGO',
+            'APPSERVIPSecTIMEAGO'],
+        str]:  # ? 1
+        """Get user input for selecting and formatting a query.
+        Returns:tuple: A tuple containing the selected query name and the formatted query content."""
+        query_choice = UserInputHandler.select_query()
+        query_name = query_choice
+        ip1 = ip2 = None
+        if query_name == "AZDIAG_IP1IP2TIMEAGO":
+            ip1 = input('Enter value for IP1: ')
+            ip2 = input('Enter value for IP2: ')
             timeago = input('Enter value for TIMEAGO (e.g., 10m, 2h, 1d): ')
-        query_content = format_query(query_name, ip1=ip1, ip2=ip2, timeago=timeago)
-    elif query_name == "AZDIAG_TIMEBETWEEN":
-        STARTTIME = input_datetime_with_validation('Start time: ')
-        ENDTIME = input_datetime_with_validation('End time: ')
-        query_content = format_query(query_name, start_t=STARTTIME, end_t=ENDTIME)
+            while not TimeUtils.validate_time_format(timeago):
+                logger.info('Invalid format. Please include (m)inutes, (h)ours, (d)ays, or (w)eeks. E.g., "10m" for 10 minutes.')
+                timeago = input('Enter value for TIMEAGO (e.g., 10m, 2h, 1d): ')
+            query_content = QueryFormatter.format_query(query_name, ip1=ip1, ip2=ip2, timeago=timeago)
+        elif query_name == "AZDIAG_TIMEBETWEEN":
+            STARTTIME = UserInputHandler.input_datetime_with_validation('Start time: ')
+            ENDTIME = UserInputHandler.input_datetime_with_validation('End time: ')
+            query_content = QueryFormatter.format_query(query_name, start_t=STARTTIME, end_t=ENDTIME)
 
-    else:
-        timeago = input('Enter value for TIMEAGO (e.g., 10m, 2h, 1d): ')
-        while not validate_time_format(timeago):
-            logger.info('Invalid format. Please include (m)inutes, (h)ours, (d)ays, or (w)eeks. E.g., "10m" for 10 minutes.')
+        else:
             timeago = input('Enter value for TIMEAGO (e.g., 10m, 2h, 1d): ')
-        query_content = format_query(query_name, timeago=timeago)
-    return query_name, query_content
+            while not TimeUtils.validate_time_format(timeago):
+                logger.info('Invalid format. Please include (m)inutes, (h)ours, (d)ays, or (w)eeks. E.g., "10m" for 10 minutes.')
+                timeago = input('Enter value for TIMEAGO (e.g., 10m, 2h, 1d): ')
+            query_content = QueryFormatter.format_query(query_name, timeago=timeago)
+        return query_name, query_content
 
 
 raw_kql_queries = {
@@ -1126,7 +1149,7 @@ a7 = 'APPSERVIPSecTIMEAGO'
 def main() -> None:
     """The main function loads configurations, processes data from either a local file or an API, and
     manages backups."""
-    excel_config, regex_config, az_config = load_configurations()
+    excel_config, regex_config, az_config = ConfigLoader.load_configurations()
     excel_config = cast(ExcelConfigurations, excel_config)
     regex_config = cast(RegexConfigurations, regex_config)
     az_config = cast(AppConfigurations, az_config)
@@ -1169,27 +1192,23 @@ def main() -> None:
     if Path(TOKEN_FILEPATH_STR).is_file():
         Path(TOKEN_FILEPATH_STR).unlink(missing_ok=True)
 
-    remove_files_from_folder(folder=OUTPUT_FOLDER, file_extension=DELALL_FEXT)
+    FileHandler.remove_files_from_folder(folder=OUTPUT_FOLDER, file_extension=DELALL_FEXT)
 
-    input('remove_files_from_folder complete.')
     if Path(AZDIAG_JSON_FILEPATH_STR).is_file():
-        query_name_for_local = select_query()
-        process_data(AZDIAG_JSON_FILEPATH_STR, AZDIAG_CSV_FILEPATH_STR, AZDIAG_EXTRACTIONLOGS_FILEPATH_STR, AZDIAG_EXCEL_FILEPATH,
-                     AZDIAG_EXCEL_FINAL_FILEPATH, CL_INIT_ORDER, CL_DROPPED, AZDIAG_REGEX, AZDIAG_STRINGS, MATCH_VALUE_TO_SPECIFIC_COLUMN,
-                     EXCLUSION_PAIRS, CL_FINAL_ORDER)
+        query_name_for_local = UserInputHandler.select_query()
+        DataProcessor.process_data(AZDIAG_JSON_FILEPATH_STR, AZDIAG_CSV_FILEPATH_STR, AZDIAG_EXTRACTIONLOGS_FILEPATH_STR, AZDIAG_EXCEL_FILEPATH, AZDIAG_EXCEL_FINAL_FILEPATH,
+                                   CL_INIT_ORDER, CL_DROPPED, AZDIAG_REGEX, AZDIAG_STRINGS, MATCH_VALUE_TO_SPECIFIC_COLUMN, EXCLUSION_PAIRS, CL_FINAL_ORDER)
         logger.debug(f'Processed local data from source: {AZDIAG_JSON_FILEPATH_STR}')
-        BackupConfigurator.manage_backups(OUTPUT_FOLDER, query_name_for_local)
+        BackupManager.manage_backups(OUTPUT_FOLDER, query_name_for_local)
     else:
-        data, query_name = APIManager.fetch_and_save_api_data(TOKEN_URL, CLIENT_ID, CLIENT_SECRET, AZDIAG_SCOPE, TOKEN_FILEPATH_STR,
-                                                              AZDIAG_JSON_FILEPATH_STR, AZLOG_ZEN_ENDPOINT)
+        data, query_name = APIManager.fetch_and_save_api_data(TOKEN_URL, CLIENT_ID, CLIENT_SECRET, AZDIAG_SCOPE, TOKEN_FILEPATH_STR, AZDIAG_JSON_FILEPATH_STR, AZLOG_ZEN_ENDPOINT)
         logger.info(f'Query name: {query_name}')
         logger.info(f'API data saved to: {AZDIAG_JSON_FILEPATH_STR}')
         if data:
-            process_data(AZDIAG_JSON_FILEPATH_STR, AZDIAG_CSV_FILEPATH_STR, AZDIAG_EXTRACTIONLOGS_FILEPATH_STR, AZDIAG_EXCEL_FILEPATH,
-                         AZDIAG_EXCEL_FINAL_FILEPATH, CL_INIT_ORDER, CL_DROPPED, AZDIAG_REGEX, AZDIAG_STRINGS, MATCH_VALUE_TO_SPECIFIC_COLUMN,
-                         EXCLUSION_PAIRS, CL_FINAL_ORDER)
+            DataProcessor.process_data(AZDIAG_JSON_FILEPATH_STR, AZDIAG_CSV_FILEPATH_STR, AZDIAG_EXTRACTIONLOGS_FILEPATH_STR, AZDIAG_EXCEL_FILEPATH, AZDIAG_EXCEL_FINAL_FILEPATH,
+                                       CL_INIT_ORDER, CL_DROPPED, AZDIAG_REGEX, AZDIAG_STRINGS, MATCH_VALUE_TO_SPECIFIC_COLUMN, EXCLUSION_PAIRS, CL_FINAL_ORDER)
             logger.info(f'Processed API data from source: {AZDIAG_JSON_FILEPATH_STR}')
-            BackupConfigurator.manage_backups(OUTPUT_FOLDER, query_name)
+            BackupManager.manage_backups(OUTPUT_FOLDER, query_name)
         else:
             logger.error('Failed to process API data.')
 
