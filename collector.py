@@ -18,7 +18,7 @@ from convertTime import convert_utc_to_sydney
 from configurator import excelConfigurator, regexConfigurator, load_kql_queries, setup_logging, load_config_from_file, jprint
 
 OUTPUT_FOLDER: str = 'AZLOGS'
-LOG_FOLDER: str = OUTPUT_FOLDER + '/LOG'
+LOG_FOLDER: str = f'{OUTPUT_FOLDER}/LOG'
 if not Path(OUTPUT_FOLDER).is_dir():
     Path(OUTPUT_FOLDER).mkdir()
 if not Path(LOG_FOLDER).is_dir():
@@ -273,12 +273,9 @@ class FileHandler():
                     logger.info(f'DataFrame Rows: {dataframe_row_length} - DataFrame Columns: {dataframe_column_length}')
                     df = DataFrameManipulator.processExclusionPairs(df, filename, exclusion_pairs, log_file)
                     logger.info("Proces exclusion pairs completed.")
-                    if df is None:
+                    if df is None or df.empty:
                         logger.warning("DataFrame is empty. Exiting")
-                        exit()
-                    elif df.empty:
-                        logger.warning("DataFrame is empty. Exiting")
-                        exit()
+                        sys.exit()
                     if dataframe_row_length != len(df):
                         logger.info(f'New dataframe row and column count: {len(df)} x {len(df.columns)}')
                         logger.info(f'Difference afer exclusion pairs: {dataframe_row_length - len(df)} rows')
