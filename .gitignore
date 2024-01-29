@@ -12,3 +12,4 @@ config/regex.yaml
 config/columns.yaml
 __pycache__/
 config/whitelist.yaml
+config/IPs.yaml

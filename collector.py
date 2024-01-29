@@ -1,4 +1,4 @@
-# collector.py
+# collector.py  # pylint disable=too-many-lines # pylint: disable=C0302
 import json
 from datetime import datetime
 from typing import Any, Tuple, List, Dict, Literal, TypedDict, cast, LiteralString
@@ -6,6 +6,7 @@ import logging
 import inspect
 import shutil
 import sys
+from time import sleep
 from pathlib import Path
 import os
 import stat
@@ -13,10 +14,11 @@ import re
 from dateutil import parser
 import pytz
 import pandas as pd
+from pandas import DataFrame
 import yaml
 import httpx
 from convertTime import convert_utc_to_sydney
-from configurator import excelConfigurator, regexConfigurator, load_kql_queries, setup_logging, load_config_from_file, jprint
+from configurator import excelConfigurator, regexConfigurator, load_kql_queries, setup_logging, load_config_from_file, jprint, console
 
 OUTPUT_FOLDER: str = 'AZLOGS'
 LOG_FOLDER: str = f'{OUTPUT_FOLDER}/LOG'
@@ -205,14 +207,25 @@ class APIManager():
         """The function fetches and saves API data using a token and query, and handles errors."""
         query_name, query_content = UserInputHandler.get_query_input()
         KQL = json.dumps({"query": query_content})
-        logger.info(f'Active [yellow]Query Name:[/yellow] [red]{query_name}[/red]')
-        logger.warning('Active [yellow]Query:[/yellow]')
-        jprint(KQL)
-        correct_query = input(f'Correct query? {query_name} Enter to continue, or type anything to exit...\n')
+        logger.info(f'\nActive [yellow]Query Name:[/yellow] [red]{query_name}[/red]\n')
+        S.lf()
+        # logger.warning('\nActive [yellow]Query([red]JSON[/red]):[/yellow]')
+        # Shotcuts.CRLF()
+        # jprint(KQL)
+        # Shotcuts.CRLF()
+        console.print('Active Query([red] Formatted [/red]):', style="blue blink", justify="center")
+        S.lf()
+        console.print(query_content, style="white", justify="left")
+        S.lf()
+        console.print('IS THE QUERY CORRECT?', style="green bold", justify="center")
+        S.lf()
+        correct_query = input(f'Query name: {query_name} Enter to continue, or type anything to exit...')
+        S.lf()
         if correct_query == '':
             logger.info(f'Proceed with: {query_name}')
         else:
             logger.info('Incorrect query, exiting...')
+            sys.exit()
 
         token_info = APIManager.save_new_token(token_url, client_id, client_secret, resource_scope, token_file_path)
         if not token_info:
@@ -221,10 +234,9 @@ class APIManager():
         try:
             token_key = token_info["access_token"]  # type: ignore
             headers = {'Authorization': f'Bearer {token_key}'}
-            # logger.info(f"Headers: {headers}")
+            # logger.info(f"Headers: {headers}") # !
             query = KQL
-            response = APIManager.get_logs_from_azure_analytics(query, headers, endpoint)
-            if response:
+            if response := APIManager.get_logs_from_azure_analytics(query, headers, endpoint):
                 FileHandler.save_json(response, json_file_path)
                 return response, query_name
             logger.error("Could not fetch data from API. Exiting.")
@@ -238,7 +250,7 @@ class APIManager():
 class FileHandler():
 
     @staticmethod
-    def read_yaml(filename) -> Any | Literal['Error occured in read_yaml']:
+    def read_yaml(filename: str) -> Any:
         """The `read_yaml` function reads a YAML file and returns its contents as a Python object, while handling any exceptions that may occur."""
         try:
             with open(filename, 'r', encoding='utf-8') as stream:
@@ -318,12 +330,21 @@ class FileHandler():
                     logger.debug(f'Dropped: {len(original_list_of_columns) - len(df.columns.tolist())} columns')
                     after_drop_list_of_columns = df.columns.tolist()
 
-                    dropped_columns = "\n".join([col for col in original_list_of_columns if col not in after_drop_list_of_columns])
-                    droppped_columns_count = len([col for col in original_list_of_columns if col not in after_drop_list_of_columns])
-                    if dropped_columns:
-                        logger.debug(f'Dropped columns:\n {dropped_columns} | Count: {droppped_columns_count}')
-                    else:
-                        logger.info('No cols dropped')
+                    # dropped_columns = "\n".join([col for col in original_list_of_columns if col not in after_drop_list_of_columns])  # ? NOTE
+                    # yapf: disable
+                    if dropped_columns := "\n".join(
+                        [
+                            col
+                            for col in original_list_of_columns
+                            if col not in after_drop_list_of_columns
+                        ]
+                    ):
+                        # yapf: enable
+                        droppped_columns_count = len([col for col in original_list_of_columns if col not in after_drop_list_of_columns])
+                        if dropped_columns:
+                            logger.debug(f'Dropped columns:\n {dropped_columns} | Count: {droppped_columns_count}')
+                        else:
+                            logger.info('No cols dropped')
                     df.to_csv(filename, index=False, encoding='utf-8')
                     DataFrameUtilities.find_duplicate_columns(df)
                     return True
@@ -360,11 +381,15 @@ class FileHandler():
             new_order += rest_columns
 
             # ! Optional, for debugging
-            duplicate_cols = DataFrameUtilities.find_duplicate_columns(df[new_order])
-            if duplicate_cols:
-                logger.info(f"Duplicate columns after reordering: {duplicate_cols}")
+            if duplicate_cols := DataFrameUtilities.find_duplicate_columns(df[new_order]):  # ? NOTE
+                logger.info(f"Duplicate columns before reordering: {duplicate_cols}")
             else:
-                logger.info("No duplicate columns after reordering.")
+                logger.info("No duplicate columns before reordering.")
+            # duplicate_cols = DataFrameUtilities.find_duplicate_columns(df[new_order])
+            # if duplicate_cols:
+            #     logger.info(f"Duplicate columns after reordering: {duplicate_cols}")
+            # else:
+            #     logger.info("No duplicate columns after reordering.")
 
             df[new_order].to_csv(output_file, index=False)
             logger.info(f"DataFrame saved to CSV with new order: {output_file}")
@@ -408,12 +433,22 @@ class FileHandler():
                 log_data += "\n"
                 log_data += f"{row[column]}"  # ! Append the removed row to the log data
                 additional_columns = [KEYSEARCH_requestQuery_s, KEYSEARCH_originalRequestUriWithArgs_s, KEYSEARCH_requestUri_s]  # ! Define additional columns to capture
-                additional_info = []
-                for col in additional_columns:
-                    if col in row:
-                        additional_info.append(f"{col}: {row[col]}")  # ! Capture additional information from the row if the column exists
-                if additional_info:
+
+                # additional_info = []
+                # for col in additional_columns:
+                #     if col in row:
+                #         additional_info.append(f"{col}: {row[col]}")  # ! Capture additional information from the row if the column exists
+
+                # if additional_info:
+                #     log_data += ", ".join(additional_info) + "\n"  # ! Append the additional information to the log data
+                # yapf: disable  # ? NOTE
+                if additional_info := [
+                    f"{col}: {row[col]}"
+                    for col in additional_columns
+                    if col in row
+                    ]:
                     log_data += ", ".join(additional_info) + "\n"  # ! Append the additional information to the log data
+                # yapf: enable
             FileHandler.save_raw_logs(log_data, filename)  # ! Write the log data to the file
         except Exception as e:
             logger.error(f'E in save_removed_rows_to_raw_logs: {e}', exc_info=True, stack_info=True)
@@ -422,7 +457,7 @@ class FileHandler():
 class DataFrameManipulator():
 
     @staticmethod
-    def processExclusionPairs(df: pd.DataFrame, filename: str, exclusion_pairs, log_file: str):
+    def processExclusionPairs(df: pd.DataFrame, filename: str, exclusion_pairs, log_file: str) -> Any | DataFrame:
         """The `processExclusionPairs` function takes a DataFrame, a filename, a dictionary of exclusion pairs,
         and a log file as input, and processes the exclusion pairs by removing rows from the DataFrame that
         match the specified values, logging the removed rows, and saving the potentially modified DataFrame
@@ -449,8 +484,9 @@ class DataFrameManipulator():
                     columns_before = set(df.columns)
                     df.dropna(axis=1, how='all', inplace=True)
                     columns_after = set(df.columns)
-                    columns_dropped = columns_before - columns_after
-                    if columns_dropped:
+                    # columns_dropped = columns_before - columns_after  # ? NOTE
+                    # if columns_dropped:
+                    if columns_dropped := columns_before - columns_after:
                         logger.debug(f"Columns dropped because they became empty after exclusion: {columns_dropped}")
                     else:
                         logger.warning("No columns were dropped after exclusion.")
@@ -779,60 +815,6 @@ class SystemUtils():
             logger.error(f"Error modifying permissions for {path}: {e}", exc_info=True, stack_info=True, extra={'color': 'red'}, stacklevel=2)
 
 
-class QueryFormatter():
-
-    @staticmethod
-    def format_query(query_name, ip1=None, ip2=None, timeago=None, iplist=None, start_t=None, end_t=None) -> str:  # pylint: disable=unused-argument # noqa: W0613
-        """Formats a query based on the given parameters.
-        Parameters:
-        - query_name: The name of the query.
-        - ip1: The value for IP1 (optional).
-        - ip2: The value for IP2 (optional).
-        - timeago: The value for TIMEAGO (optional).
-        - iplist: The list of IPs (optional).
-        - start_t: The start time (optional).
-        - end_t: The end time (optional).
-        Returns:
-        - str: The formatted query."""
-        query_param_map = {
-            "AZDIAG_IP1IP2TIMEAGO": {
-                "IP1": ip1,
-                "IP2": ip2,
-                "TIME": timeago
-            },
-            "AZDIAG_TIMEBETWEEN": {
-                "STARTTIME": start_t,
-                "ENDTIME": end_t
-            },
-            "AZDIAG_TIMEAGO": {
-                "TIME": timeago
-            },
-            "APPREQ_TIMEAGO": {
-                "TIME": timeago
-            },
-            "APPPAGE_TIMEAGO": {
-                "TIME": timeago
-            },
-            "APPBROWSER_TIMEAGO": {
-                "TIME": timeago
-            },
-            "APPSERVHTTPLogs_TIMEAGO": {
-                "TIME": timeago
-            },
-            "APPSERVIPSecTIMEAGO": {
-                "TIME": timeago
-            },
-        }
-
-        formatted_query_name = f"RAW_{query_name}"
-        if formatted_query_name in raw_kql_queries:
-            query_template = raw_kql_queries[formatted_query_name]
-            query_params = query_param_map.get(query_name, {})
-            return query_template.format(**query_params)
-        logger.error(f'Active [yellow]Query Name:[/yellow] [red]{query_name}[/red] not found')
-        return 'Not Found'
-
-
 class BackupManager():
 
     @staticmethod
@@ -867,7 +849,7 @@ class BackupManager():
         """The `create_backups` function creates backups of specific file types in a given input directory,
         using a unique filename based on the current timestamp and other parameters."""
         SystemUtils.check_and_modify_permissions(backup_dir)
-        extensions_to_copy = ['.csv', '.json', '.xlsx', '.log', '.txt']
+
         files = os.listdir(input_dir)
         logger.info(f'input_dir {input_dir} - backup_dir {backup_dir}')
         logger.info(f'Files found: {files}')
@@ -882,6 +864,7 @@ class BackupManager():
             logger.info(f'File loaded: {AZDIAG_CSV_FILEPATH_STR} which has {df.shape[0]} rows and {df.shape[1]} columns')
             logger.info(f'Converted timestamp: {first_timestamp}')
 
+            extensions_to_copy = ['.csv', '.json', '.xlsx', '.log', '.txt']  # ! EXTENSION LIST
             for file in files:
                 filename, file_extension = os.path.splitext(file)
                 if file_extension in extensions_to_copy:
@@ -949,11 +932,13 @@ class BackupManager():
                         f'\nCreating dir: {backup_dir}')
             Path(backup_dir).mkdir(parents=True, exist_ok=True)
         logger.info(f'Backup dir: {backup_dir}')
-
-        if not Path(backup_dir).is_dir():
-            if not Path(kql_backup_dir).is_dir():
-                Path(kql_backup_dir).mkdir(parents=True, exist_ok=True)
-                Path(backup_dir).mkdir(parents=True, exist_ok=True)
+        if not Path(backup_dir).is_dir() and not Path(kql_backup_dir).is_dir():  # ? NOTE
+            Path(kql_backup_dir).mkdir(parents=True, exist_ok=True)
+            Path(backup_dir).mkdir(parents=True, exist_ok=True)
+        # if not Path(backup_dir).is_dir():
+        #     if not Path(kql_backup_dir).is_dir():
+        #         Path(kql_backup_dir).mkdir(parents=True, exist_ok=True)
+        #         Path(backup_dir).mkdir(parents=True, exist_ok=True)
         try:
             SRC_LOG_FILE = f'{LOG_FOLDER}/applogs.log'
             DEST_LOG_FILE = f'{backup_dir}/applogs.log'
@@ -992,6 +977,15 @@ class DataProcessor():
                                                                filename=AZDIAG_CSV_FILEPATH_STR,
                                                                exclusion_pairs=EXCLUSION_PAIRS,
                                                                log_file=AZDIAG_EXTRACTIONLOGS_FILEPATH_STR)
+
+                if saveData := FileHandler.saveTablesResponseToCSV(json_data=json_data,
+                                                                   filename=AZDIAG_CSV_FILEPATH_STR,
+                                                                   exclusion_pairs=EXCLUSION_PAIRS,
+                                                                   log_file=AZDIAG_EXTRACTIONLOGS_FILEPATH_STR):
+                    logger.debug(f'CSV file created: {AZDIAG_CSV_FILEPATH_STR}')
+                else:
+                    logger.debug(f'CSV file not created: {AZDIAG_CSV_FILEPATH_STR}. Exiting...')
+                    sys.exit()
                 if saveData:
                     FileHandler.read_csv_add_LT_col_write_csv(input_file=AZDIAG_CSV_FILEPATH_STR,
                                                               source_col=CL_TimeGenerated,
@@ -1033,34 +1027,44 @@ class UserInputHandler():
     def select_query(
     ) -> Any | Literal['AZDIAG_IP1IP2TIMEAGO', 'AZDIAG_TIMEAGO', 'APPREQ_TIMEAGO', 'APPPAGE_TIMEAGO', 'APPBROWSER_TIMEAGO', 'APPSERVHTTPLogs_TIMEAGO', 'APPSERVIPSecTIMEAGO']:
         """Selects a query from a list of options and returns the chosen query."""
-        logger.info('Select query')
-        logger.info('1. AZDIAG_IP1IP2TIMEAGO')
-        logger.info('2. AZDIAG_TIMEAGO')
-        logger.info('3. AZDIAG_TIMEBETWEEN')
-        logger.info('4. APPREQ_TIMEAGO')
-        logger.info('5. APPPAGE_TIMEAGO')
-        logger.info('6. APPBROWSER_TIMEAGO')
-        logger.info('7. APPSERVHTTPLogs_TIMEAGO')
-        logger.info('8. APPSERVIPSecTIMEAGO')
-        logger.info('9. Exit')
+        console.print('[red]Select query[/red]', style='bold', justify='center', markup=True)
+        S.lf()
+        console.print('[yellow]#' * 30 + 'AzureDiagnostics' + '#[/yellow]' * 30, style='bold', justify='center', markup=True)
+        console.print('1. [blue]AZDIAG IP1IP2TIMEAGO[/blue]', style='italic', justify='center', markup=True)
+        console.print('2. [blue]AZDIAG TIMEBETWEEN[/blue]', style='blink', justify='center', markup=True)
+        console.print('3. [blue]AZDIAG SINGLEIPTIMEBETWEEN[/blue]', style='blink', justify='center', markup=True)
+        console.print('4. [blue]AZDIAG TIMEAGO[/blue]', style='blink', justify='center', markup=True)
+        console.print('[yellow]#' * 30 + 'AppRequests' + '#[/yellow]' * 30, style='bold', justify='center', markup=True)
+        console.print('5. [blue]APPREQ TIMEAGO[/blue]', style='blink', justify='center', markup=True)
+        console.print('[yellow]#' * 30 + 'AppPages' + '#[/yellow]' * 30, style='bold', justify='center', markup=True)
+        console.print('6. [blue]APPPAGE TIMEAGO[/blue]', style='blink', justify='center', markup=True)
+        console.print('[yellow]#' * 30 + 'AppBrowser' + '#[/yellow]' * 30, style='bold', justify='center', markup=True)
+        console.print('7. [blue]APPBROWSER TIMEAGO[/blue]', style='blink', justify='center', markup=True)
+        console.print('[yellow]#' * 30 + 'AppServiceHTTPLogs' + '#[/yellow]' * 30, style='bold', justify='center', markup=True)
+        console.print('8. [blue]APPSERVHTTPLogs TIMEAGO[/blue]', style='blink', justify='center', markup=True)
+        console.print('[yellow]#' * 30 + 'AppServiceIPSec' + '#[/yellow]' * 30, style='bold', justify='center', markup=True)
+        console.print('9. [blue]APPSERVIPSec TIMEAGO[/blue]', style='blink', justify='center', markup=True)
+        console.print('0. [magenta]Exit[/magenta]', style='blink', justify='center', markup=True)
         query = input('Select query: ')
         if query == '1':
-            return a
+            return azdiag1
         elif query == '2':
-            return a1
+            return azdiag2
         elif query == '3':
-            return a2
+            return azdiag3
         elif query == '4':
-            return a3
+            return azdiag4
         elif query == '5':
-            return a4
+            return req1
         elif query == '6':
-            return a5
+            return page1
         elif query == '7':
-            return a6
+            return browser1
         elif query == '8':
-            return a7
+            return httplogs1
         elif query == '9':
+            return a7
+        elif query == '0':
             sys.exit()
         logger.info('Wrong query, try again')
         return UserInputHandler.select_query()
@@ -1079,8 +1083,9 @@ class UserInputHandler():
     def get_query_input() -> tuple[
         Any | Literal[
             'AZDIAG_IP1IP2TIMEAGO',
-            'AZDIAG_TIMEAGO',
             'AZDIAG_TIMEBETWEEN',
+            'AZDIAG_SINGLEIPTIMEBETWEEN',
+            'AZDIAG_TIMEAGO',
             'APPREQ_TIMEAGO',
             'APPPAGE_TIMEAGO',
             'APPBROWSER_TIMEAGO',  # ! Here
@@ -1101,9 +1106,14 @@ class UserInputHandler():
                 timeago = input('Enter value for TIMEAGO (e.g., 10m, 2h, 1d): ')
             query_content = QueryFormatter.format_query(query_name, ip1=ip1, ip2=ip2, timeago=timeago)
         elif query_name == "AZDIAG_TIMEBETWEEN":
-            STARTTIME = UserInputHandler.input_datetime_with_validation('Start time: ')
-            ENDTIME = UserInputHandler.input_datetime_with_validation('End time: ')
-            query_content = QueryFormatter.format_query(query_name, start_t=STARTTIME, end_t=ENDTIME)
+            STARTTIME = UserInputHandler.input_datetime_with_validation('Start time(Example fmt 2024-01-28T17:57:38Z): ')
+            ENDTIME = UserInputHandler.input_datetime_with_validation('End time(Example fmt 2024-01-28T17:57:38Z: ')
+            query_content = QueryFormatter.format_query(query_name, start_t=STARTTIME, end_t=ENDTIME, whitelist=WHITELIST_IPs)
+        elif query_name == "AZDIAG_SINGLEIPTIMEBETWEEN":
+            STARTTIME = UserInputHandler.input_datetime_with_validation('Start time(Example fmt 2024-01-28T17:57:38Z): ')
+            ENDTIME = UserInputHandler.input_datetime_with_validation('End time(Example fmt 2024-01-28T17:57:38Z: ')
+            single_ip = UserInputHandler.input_datetime_with_validation('IP: ')
+            query_content = QueryFormatter.format_query(query_name, start_t=STARTTIME, end_t=ENDTIME, singleip=single_ip)
 
         else:
             timeago = input('Enter value for TIMEAGO (e.g., 10m, 2h, 1d): ')
@@ -1112,6 +1122,79 @@ class UserInputHandler():
                 timeago = input('Enter value for TIMEAGO (e.g., 10m, 2h, 1d): ')
             query_content = QueryFormatter.format_query(query_name, timeago=timeago)
         return query_name, query_content
+
+
+class QueryFormatter():
+
+    @staticmethod
+    def format_query(query_name, ip1=None, ip2=None, timeago=None, iplist=None, start_t=None, end_t=None, whitelist=None, blacklist=None, singleip=None) -> str:  # pylint: disable=unused-argument # noqa: W0613
+        """Formats a query based on the given parameters.
+        Parameters:
+        - query_name: The name of the query.
+        - ip1: The value for IP1 (optional).
+        - ip2: The value for IP2 (optional).
+        - timeago: The value for TIMEAGO (optional).
+        - iplist: The list of IPs (optional).
+        - start_t: The start time (optional).
+        - end_t: The end time (optional).
+        Returns:
+        - str: The formatted query."""
+        query_param_map = {
+            "AZDIAG_IP1IP2TIMEAGO": {
+                "IP1": ip1,
+                "IP2": ip2,
+                "TIME": timeago
+            },
+            "AZDIAG_TIMEBETWEEN": {
+                "STARTTIME": start_t,
+                "ENDTIME": end_t,
+                "WHITE": WHITELIST_IPs,
+            },
+            "AZDIAG_SINGLEIPTIMEBETWEEN": {
+                "STARTTIME": start_t,
+                "ENDTIME": end_t,
+                "WHITE": WHITELIST_IPs,
+                "SINGLEIP": singleip
+            },
+            "AZDIAG_TIMEAGO": {
+                "TIME": timeago
+            },
+            "APPREQ_TIMEAGO": {
+                "TIME": timeago
+            },
+            "APPPAGE_TIMEAGO": {
+                "TIME": timeago
+            },
+            "APPBROWSER_TIMEAGO": {
+                "TIME": timeago
+            },
+            "APPSERVHTTPLogs_TIMEAGO": {
+                "TIME": timeago
+            },
+            "APPSERVIPSecTIMEAGO": {
+                "TIME": timeago
+            },
+        }
+
+        formatted_query_name = f"RAW_{query_name}"
+        if formatted_query_name in raw_kql_queries:
+            query_template = raw_kql_queries[formatted_query_name]
+            query_params = query_param_map.get(query_name, {})
+            return query_template.format(**query_params)
+        logger.error(f'Active [yellow]Query Name:[/yellow] [red]{query_name}[/red] not found')
+        return 'Not Found'
+
+
+class S():  # ! Shotcuts
+
+    @staticmethod
+    def lf() -> None:  # ! CRLF - Linefeed
+        console.print('\r\n')
+
+    @staticmethod
+    def s(t: float = 0.5) -> None:
+        sleep(t)
+        console.print(f'Sleepy time Zzz{t}...')
 
 
 # ! TIME
@@ -1123,10 +1206,10 @@ NOWINSYDNEY_FILEFORMAT: str = time_info['NOWINSYDNEY_FILEFORMAT']
 NOWINAZURE_FILEFORMAT: str = time_info['NOWINAZURE_FILEFORMAT']
 logger.info(f'Sydney Time {NOWINSYDNEY}')
 logger.info(f'Sydney Time {NOWINAZURE}')
-
 raw_kql_queries = {
     "RAW_AZDIAG_IP1IP2TIMEAGO": kql_queries["F_AzDiag_IP1IP2TIMEAGO"]["query"],
     "RAW_AZDIAG_TIMEBETWEEN": kql_queries["F_AzDiag_TIMEBETWEEN"]["query"],
+    "RAW_AZDIAG_SINGLEIPTIMEBETWEEN": kql_queries["F_AzDiag_SINGLEIPTIMEBETWEEN"]["query"],
     "RAW_AZDIAG_TIMEAGO": kql_queries["F_AzDiag_TIMEAGO"]["query"],
     "RAW_APPREQ_TIMEAGO": kql_queries["F_AppReq_TIMEAGO"]["query"],
     "RAW_APPPAGE_TIMEAGO": kql_queries["F_AppPage_TIMEAGO"]["query"],
@@ -1135,18 +1218,21 @@ raw_kql_queries = {
     "RAW_APPSERVIPSecTIMEAGO": kql_queries["F_AppServIPSecTIMEAGO"]["query"],
 }
 # # ? IPs
-WHITELISTIPS_FILEPATH = 'config/whitelist.yaml'
-whitelist_data = FileHandler.read_yaml(WHITELISTIPS_FILEPATH)
-WHITELISTED_IPS = whitelist_data['WHITELISTED_IPs'] if whitelist_data else None
-logger.info(f"WHITELISTED_IPS: {WHITELISTED_IPS}")
+IPs_FILEPATH: str = 'config/IPs.yaml'
+whitelist_data = FileHandler.read_yaml(IPs_FILEPATH)
+WHITELIST_IPs: List[str] = whitelist_data['WHITELIST']
+BLACKLIST_IPs: List[str] = whitelist_data['BLACKLIST']
+logger.info(f"WHITELIST: {WHITELIST_IPs}")
+logger.info(f"BLACKLIST: {BLACKLIST_IPs}")
 # ! OPTIONS
-a = 'AZDIAG_IP1IP2TIMEAGO'
-a1 = 'AZDIAG_TIMEAGO'
-a2 = 'AZDIAG_TIMEBETWEEN'
-a3 = 'APPREQ_TIMEAGO'
-a4 = 'APPPAGE_TIMEAGO'
-a5 = 'APPBROWSER_TIMEAGO'
-a6 = 'APPSERVHTTPLogs_TIMEAGO'
+azdiag1 = 'AZDIAG_IP1IP2TIMEAGO'
+azdiag2 = 'AZDIAG_TIMEAGO'
+azdiag3 = 'AZDIAG_SINGLEIPTIMEBETWEEN'
+azdiag4 = 'AZDIAG_TIMEBETWEEN'
+req1 = 'APPREQ_TIMEAGO'
+page1 = 'APPPAGE_TIMEAGO'
+browser1 = 'APPBROWSER_TIMEAGO'
+httplogs1 = 'APPSERVHTTPLogs_TIMEAGO'
 a7 = 'APPSERVIPSecTIMEAGO'
 
 
@@ -1197,7 +1283,7 @@ def main() -> None:
         Path(TOKEN_FILEPATH_STR).unlink(missing_ok=True)
 
     FileHandler.remove_files_from_folder(folder=OUTPUT_FOLDER, file_extension=DELALL_FEXT)
-
+    S.s()
     if Path(AZDIAG_JSON_FILEPATH_STR).is_file():
         query_name_for_local = UserInputHandler.select_query()
         DataProcessor.process_data(AZDIAG_JSON_FILEPATH_STR, AZDIAG_CSV_FILEPATH_STR, AZDIAG_EXTRACTIONLOGS_FILEPATH_STR, AZDIAG_EXCEL_FILEPATH, AZDIAG_EXCEL_FINAL_FILEPATH,
