@@ -48,6 +48,36 @@ class ConfigLoader():
         return excelConfigurator(config_keys), regexConfigurator(regex_keys), load_config_from_file()
 
 
+class ExcelConfigurations(TypedDict):
+    CL_INIT_ORDER: List[str]
+    CL_DROPPED: List[str]
+    CL_FINAL_ORDER: List[str]
+    EXCLUSION_PAIRS: Dict[str, List[str]]
+
+
+class RegexConfigurations(TypedDict):
+    AZDIAG_PATTS: List[str]
+    AZDIAG_STRINGS: List[str]
+    MATCH_VALUE_TO_SPECIFIC_COLUMN: Dict[str, List[str]]
+
+
+class AppConfigurations(TypedDict):
+    TENANT_ID: str
+    CLIENT_ID: str
+    CLIENT_SECRET: str
+    ZEN_WORKSPACE_ID: str
+    AZDIAG_SCOPE: str
+    AZLOG_ENDPOINT: str
+    TOKEN_FILEPATH_STR: str
+    AZDIAG_JSON_FILEPATH_STR: str
+    AZDIAG_CSV_FILEPATH_STR: str
+    AZDIAG_EXCEL_FILEPATH: Path
+    AZDIAG_EXCEL_FINAL_FILEPATH: Path
+    AZDIAG_EXTRACTIONLOGS_FILEPATH_STR: str
+    TOKEN_URL: str
+    AZLOG_ZEN_ENDPOINT: str
+
+
 class DataFrameUtilities():
 
     @staticmethod
@@ -101,17 +131,6 @@ class TimeUtils():
     def validate_time_format(time_str) -> bool:
         """Validates if the time string includes a time unit (m, h, d, w). Returns True if valid, False otherwise."""
         return bool(re.match(r'^\d+[mhdw]$', time_str))
-
-
-# ! TIME
-time_info = TimeUtils.get_current_time_info()
-NOWINSYDNEY: str = time_info['NOWINSYDNEY']
-NOWINAZURE: str = time_info['NOWINAZURE']
-TODAY: str = time_info['TODAY']
-NOWINSYDNEY_FILEFORMAT: str = time_info['NOWINSYDNEY_FILEFORMAT']
-NOWINAZURE_FILEFORMAT: str = time_info['NOWINAZURE_FILEFORMAT']
-logger.info(f'Sydney Time {NOWINSYDNEY}')
-logger.info(f'Sydney Time {NOWINAZURE}')
 
 
 class APIManager():
@@ -219,13 +238,15 @@ class APIManager():
 class FileHandler():
 
     @staticmethod
-    def read_yaml(filename):
+    def read_yaml(filename) -> Any | Literal['Error occured in read_yaml']:
+        """The `read_yaml` function reads a YAML file and returns its contents as a Python object, while handling any exceptions that may occur."""
         try:
-            with open(filename, 'r') as stream:
+            with open(filename, 'r', encoding='utf-8') as stream:
                 data = yaml.safe_load(stream)
             return data
         except Exception as e:
             logger.error(f'Error in read_yaml: {e}', exc_info=True, stack_info=True, extra={'color': 'red'}, stacklevel=2)
+            return 'Error occured in read_yaml'
 
     @staticmethod
     def remove_files_from_folder(folder, file_extension) -> None:
@@ -739,36 +760,6 @@ class ExcelManager():
         apply_final_column_order_and_save(df, final_column_order, output_file, available_columns_before_drop)
 
 
-class ExcelConfigurations(TypedDict):
-    CL_INIT_ORDER: List[str]
-    CL_DROPPED: List[str]
-    CL_FINAL_ORDER: List[str]
-    EXCLUSION_PAIRS: Dict[str, List[str]]
-
-
-class RegexConfigurations(TypedDict):
-    AZDIAG_PATTS: List[str]
-    AZDIAG_STRINGS: List[str]
-    MATCH_VALUE_TO_SPECIFIC_COLUMN: Dict[str, List[str]]
-
-
-class AppConfigurations(TypedDict):
-    TENANT_ID: str
-    CLIENT_ID: str
-    CLIENT_SECRET: str
-    ZEN_WORKSPACE_ID: str
-    AZDIAG_SCOPE: str
-    AZLOG_ENDPOINT: str
-    TOKEN_FILEPATH_STR: str
-    AZDIAG_JSON_FILEPATH_STR: str
-    AZDIAG_CSV_FILEPATH_STR: str
-    AZDIAG_EXCEL_FILEPATH: Path
-    AZDIAG_EXCEL_FINAL_FILEPATH: Path
-    AZDIAG_EXTRACTIONLOGS_FILEPATH_STR: str
-    TOKEN_URL: str
-    AZLOG_ZEN_ENDPOINT: str
-
-
 class SystemUtils():
 
     @staticmethod
@@ -1122,6 +1113,16 @@ class UserInputHandler():
             query_content = QueryFormatter.format_query(query_name, timeago=timeago)
         return query_name, query_content
 
+
+# ! TIME
+time_info = TimeUtils.get_current_time_info()
+NOWINSYDNEY: str = time_info['NOWINSYDNEY']
+NOWINAZURE: str = time_info['NOWINAZURE']
+TODAY: str = time_info['TODAY']
+NOWINSYDNEY_FILEFORMAT: str = time_info['NOWINSYDNEY_FILEFORMAT']
+NOWINAZURE_FILEFORMAT: str = time_info['NOWINAZURE_FILEFORMAT']
+logger.info(f'Sydney Time {NOWINSYDNEY}')
+logger.info(f'Sydney Time {NOWINAZURE}')
 
 raw_kql_queries = {
     "RAW_AZDIAG_IP1IP2TIMEAGO": kql_queries["F_AzDiag_IP1IP2TIMEAGO"]["query"],
