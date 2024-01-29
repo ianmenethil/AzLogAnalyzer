@@ -13,6 +13,7 @@ import re
 from dateutil import parser
 import pytz
 import pandas as pd
+import yaml
 import httpx
 from convertTime import convert_utc_to_sydney
 from configurator import excelConfigurator, regexConfigurator, load_kql_queries, setup_logging, load_config_from_file, jprint
@@ -216,6 +217,15 @@ class APIManager():
 
 
 class FileHandler():
+
+    @staticmethod
+    def read_yaml(filename):
+        try:
+            with open(filename, 'r') as stream:
+                data = yaml.safe_load(stream)
+            return data
+        except Exception as e:
+            logger.error(f'Error in read_yaml: {e}', exc_info=True, stack_info=True, extra={'color': 'red'}, stacklevel=2)
 
     @staticmethod
     def remove_files_from_folder(folder, file_extension) -> None:
@@ -1124,14 +1134,10 @@ raw_kql_queries = {
     "RAW_APPSERVIPSecTIMEAGO": kql_queries["F_AppServIPSecTIMEAGO"]["query"],
 }
 # # ? IPs
-# KQL_IPLIST = ['14.161.17.210', '115.78.224.106']
-# KQL_IP1 = '14.161.17.210'
-# KQL_IP2 = '115.78.224.106'
-# # ! TIME
-# KQL_TIMEAGO_TIME = '2m'
-# STARTTIME = '2024-01-25T06:05:00Z'
-# ENDTIME = '2024-01-25T06:15:00Z'
-# # endTime = '2024-01-25T06:14:34.0000000'
+WHITELISTIPS_FILEPATH = 'config/whitelist.yaml'
+whitelist_data = FileHandler.read_yaml(WHITELISTIPS_FILEPATH)
+WHITELISTED_IPS = whitelist_data['WHITELISTED_IPs'] if whitelist_data else None
+logger.info(f"WHITELISTED_IPS: {WHITELISTED_IPS}")
 # ! OPTIONS
 a = 'AZDIAG_IP1IP2TIMEAGO'
 a1 = 'AZDIAG_TIMEAGO'
