@@ -2,16 +2,15 @@
 import json
 from datetime import datetime
 from typing import Any, Tuple, List, Dict, Literal, TypedDict, cast, LiteralString
-from dateutil import parser
 import logging
 import inspect
-import time
 import shutil
 import sys
 from pathlib import Path
 import os
 import stat
 import re
+from dateutil import parser
 import pytz
 import pandas as pd
 import httpx
@@ -38,28 +37,32 @@ DELALL_FEXT: Tuple[str, str, str, str] = ('.csv', '.xlsx', '.log', '.txt')
 
 
 def load_configurations():
+    """The function "load_configurations" returns three objects: an excelConfigurator object, a
+    regexConfigurator object, and the result of loading a configuration from a file."""
     config_keys = ['CL_INIT_ORDER', 'CL_DROPPED', 'CL_FINAL_ORDER', 'EXCLUSION_PAIRS']
     regex_keys = ['AZDIAG_PATTS', 'AZDIAG_STRINGS', 'MATCH_VALUE_TO_SPECIFIC_COLUMN']
     return excelConfigurator(config_keys), regexConfigurator(regex_keys), load_config_from_file()
 
 
 def find_duplicate_columns(df) -> Any:
+    """The function `find_duplicate_columns` takes a DataFrame as input and returns a list of duplicate
+    column names."""
     duplicate_columns = df.columns[df.columns.duplicated()]
     logger.info(f"Duplicate columns: {duplicate_columns.tolist()}")
     return duplicate_columns.tolist()
 
 
 def get_current_time_info() -> dict[str, Any]:
+    """The function `get_current_time_info` returns a dictionary containing the current time information in
+    Sydney and in UTC."""
     utc_zone = pytz.utc
     sydney_zone = pytz.timezone('Australia/Sydney')
     utc_now = datetime.now(utc_zone)
     sydney_now = utc_now.astimezone(sydney_zone)
     return {
-        # 'NOW': sydney_now.strftime('%d-%m-%y %H:%M:%S'),
         'NOWINSYDNEY': sydney_now.strftime('%d-%m-%y %H:%M:%S'),
         'NOWINAZURE': utc_now,
         'TODAY': sydney_now.strftime('%d-%m-%y'),
-        # 'UTCNOW': utc_now.strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
         'NOWINSYDNEY_FILEFORMAT': sydney_now.strftime("%Y-%m-%d_%H-%M-%S"),
         'NOWINAZURE_FILEFORMAT': utc_now.strftime("%Y-%m-%d_%H-%M-%S")
     }
@@ -80,15 +83,18 @@ class APIManager():
 
     @staticmethod
     def get_logs_from_azure_analytics(query, headers, zen_endpoint) -> Any | dict:  # ! API call to get logs
+        """
+        The `get_logs_from_azure_analytics` function makes an API call to retrieve logs from Azure Analytics
+        and returns the response as a JSON object.
+        """
         try:
             logger.info(f"Log endpoint:{zen_endpoint}")
             json.dumps(headers)
-            headers['Content-Type'] = 'application/json'  # Set the Content-Type to application/json
+            headers['Content-Type'] = 'application/json'
             response = httpx.post(url=zen_endpoint, data=query, headers=headers)
             response.raise_for_status()
             logger.info(f"Response URL: {response.url}")
             logger.info(f"Response Status Code: {response.status_code}")
-            # logger.info('Response Text')
             # logger.info(f'{response.text[:10]}')
             # logger.info(f'{response.text[-10:]}')
             # logger.info(f'Response Headers: {response.headers}')
@@ -101,6 +107,8 @@ class APIManager():
 
     @staticmethod
     def save_new_token(token_url, client_id, client_secret, resource_scope, token_file) -> Any | tuple[None, None]:
+        """The `save_new_token` function sends a request to obtain a new token using client credentials, saves
+        the token response to a file, and returns the token response."""
         try:
             headers = {'Content-Type': 'application/x-www-form-urlencoded'}
             payload = {
@@ -122,29 +130,27 @@ class APIManager():
             logger.error(f"An error occurred: {str(object=e)}")
         return None, None
 
-    @staticmethod
-    def is_token_valid(token_info) -> bool:
-        current_time = int(time.time())
-        expires_on = int(token_info['expires_on'])
-        return current_time < expires_on
+    # @staticmethod
+    # def is_token_valid(token_info) -> bool:
+    #     current_time = int(time.time())
+    #     expires_on = int(token_info['expires_on'])
+    #     return current_time < expires_on
 
     @staticmethod
-    # def fetch_and_save_api_data(token_url: str = '',
-    #                             client_id: str = '',
-    #                             client_secret: str = '',
-    #                             resource_scope: str = '',
-    #                             token_file_path: str = '',
-    #                             json_file_path: str = '',
-    #                             query: str = '',
-    #                             endpoint: str = '') -> Any | dict | None:
-    def fetch_and_save_api_data(token_url: str = '',
-                                client_id: str = '',
-                                client_secret: str = '',
-                                resource_scope: str = '',
-                                token_file_path: str = '',
-                                json_file_path: str = '',
-                                endpoint: str = ''):
-
+    def fetch_and_save_api_data(
+        token_url: str = '',
+        client_id: str = '',
+        client_secret: str = '',
+        resource_scope: str = '',
+        token_file_path: str = '',
+        json_file_path: str = '',
+        endpoint: str = ''
+    ) -> tuple[Literal['Error in token'], Any |
+               Literal['AZDIAG_IP1IP2TIMEAGO', 'AZDIAG_TIMEAGO', 'AZDIAG_TIMEBETWEEN', 'APPREQ_TIMEAGO', 'APPPAGE_TIMEAGO', 'APPBROWSER_TIMEAGO',
+                       'APPSERVHTTPLogs_TIMEAGO', 'APPSERVIPSecTIMEAGO']] | tuple[Any | dict[
+                           Any, Any], Any | Literal['AZDIAG_IP1IP2TIMEAGO', 'AZDIAG_TIMEAGO', 'AZDIAG_TIMEBETWEEN', 'APPREQ_TIMEAGO',
+                                                    'APPPAGE_TIMEAGO', 'APPBROWSER_TIMEAGO', 'APPSERVHTTPLogs_TIMEAGO', 'APPSERVIPSecTIMEAGO']]:
+        """The function fetches and saves API data using a token and query, and handles errors."""
         query_name, query_content = get_query_input()
         KQL = json.dumps({"query": query_content})
         logger.info(f'Active [yellow]Query Name:[/yellow] [red]{query_name}[/red]')
@@ -168,7 +174,6 @@ class APIManager():
             response = APIManager.get_logs_from_azure_analytics(query, headers, endpoint)
             if response:
                 FileHandler.save_json(response, json_file_path)
-                # logger.info(f"Data saved to JSON {json_file_path}.")
                 return response, query_name
             logger.error("Could not fetch data from API. Exiting.")
             sys.exit()
@@ -182,6 +187,7 @@ class FileHandler():
 
     @staticmethod
     def save_json(data: Any, filename: str) -> None:
+        """The `save_json` function saves data as a JSON file with error handling."""
         try:
             with open(filename, 'w', encoding='utf-8') as f:
                 json.dump(data, f)
@@ -190,6 +196,8 @@ class FileHandler():
 
     @staticmethod
     def read_json(filename: str) -> Any | Literal['Failed to read JSON file']:
+        """The `read_json` function reads a JSON file and returns its contents, or a failure message if the
+        file cannot be read."""
         try:
             with open(filename, 'r', encoding='utf-8') as f:
                 return json.load(f)
@@ -234,7 +242,6 @@ class FileHandler():
                         logger.debug(f'Dropped columns:\n {dropped_columns} | Count: {droppped_columns_count}')
                     else:
                         logger.info('No cols dropped')
-                    # Manipulations.processExclusionPairs(df, filename, exclusion_pairs)
                     df.to_csv(filename, index=False, encoding='utf-8')
                     find_duplicate_columns(df)
                     return True
@@ -247,6 +254,9 @@ class FileHandler():
 
     @staticmethod
     def read_csv_add_LT_col_write_csv(input_file, source_col, dest_col, output_file, dropped_cols, initOrder_cols) -> None:
+        """The `read_csv_add_LT_col_write_csv` function reads a CSV file, adds a new column based on a
+        specified source column, drops specified columns, reorders the columns based on an initial order,
+        checks for duplicate columns, and saves the modified DataFrame to a new CSV file."""
         try:
             df = pd.read_csv(input_file)
             logger.info(f"source_col: {source_col} | dest_col: {dest_col}")
@@ -257,24 +267,23 @@ class FileHandler():
             else:
                 df.insert(0, dest_col, new_column_data)
 
-            # Drop specified columns if they exist
+            # ! Drop specified columns if they exist
             df = df.drop(columns=[col for col in dropped_cols if col in df.columns], errors='ignore')
 
-            # Ensure initial order columns are in the DataFrame and add them first to new_order
+            # ! Ensure initial order columns are in the DataFrame and add them first to new_order
             new_order = [col for col in initOrder_cols if col in df.columns]
 
-            # Add remaining columns that were not specified in initOrder_cols
+            # ! Add remaining columns that were not specified in initOrder_cols
             rest_columns = [col for col in df.columns if col not in new_order]
             new_order += rest_columns
 
-            # Check for duplicates after reordering (Optional, for debugging)
+            # ! Optional, for debugging
             duplicate_cols = find_duplicate_columns(df[new_order])
             if duplicate_cols:
                 logger.info(f"Duplicate columns after reordering: {duplicate_cols}")
             else:
                 logger.info("No duplicate columns after reordering.")
 
-            # Save the reordered DataFrame to CSV
             df[new_order].to_csv(output_file, index=False)
             logger.info(f"DataFrame saved to CSV with new order: {output_file}")
 
@@ -282,16 +291,12 @@ class FileHandler():
             logger.error(f'Error in processing data: {e}', exc_info=True, stack_info=True)
 
     @staticmethod
-    def save_raw_logs(data: str, filename: str):
+    def save_raw_logs(data: str, filename: str) -> None:
         """ Save raw logs to a file.
         Args:   data (str): The raw log data to be saved.
-                filename (str): The name of the file to save the logs to.
-        Raises: IOError: If there is an error saving the raw logs."""
+                filename (str): The name of the file to save the logs to."""
         try:
-            logger.debug('[blue]##########Start of save_raw_logs##########[/blue]')
             logger.debug(f"Saving raw logs to file: {filename}")
-            # logger.info(f"Received data: {data}")
-
             calling_function = None
             frame = inspect.currentframe()
             if frame is not None:
@@ -303,7 +308,6 @@ class FileHandler():
             with open(filename, "a", encoding="utf-8") as f:
                 f.write(f"Calling function: {calling_function}\n")
                 f.write(data)
-            logger.debug('[blue]##########End of save_raw_logs##########[/blue]')
         except IOError as e:
             logger.error(f"Error saving raw logs: {e}", exc_info=True, stack_info=True, extra={'color': 'red'}, stacklevel=2)
 
@@ -316,11 +320,8 @@ class FileHandler():
                 filename (str): The name of the log file to save the removed rows."""
         try:
             removed_count = len(removed_rows)
-            logger.debug('[blue]##########Start of save_removed_rows_to_raw_log##########[/blue]')
-            # logger.info(f'received: removed_rows: {removed_rows} | column: {column} | pattern: {pattern} | filename: {filename}')
-            log_data = f"\n\nColumn: '{column}', Pattern: '{pattern}', Removed Rows Count: {removed_count}\n\n"  # ! Initialize the log data string
+            log_data = f"Column: '{column}', Pattern: '{pattern}', Removed Rows Count: {removed_count}\n"  # ! Initialize the log data string
             for _, row in removed_rows.iterrows():
-                # log_data += f"Removed Row: {row[column]}"  # ! Append the removed row to the log data
                 log_data += "Removed Row:"  # ! Append the removed row to the log data
                 log_data += "\n"
                 log_data += f"{row[column]}"  # ! Append the removed row to the log data
@@ -333,7 +334,6 @@ class FileHandler():
                 if additional_info:
                     log_data += ", ".join(additional_info) + "\n"  # ! Append the additional information to the log data
             FileHandler.save_raw_logs(log_data, filename)  # ! Write the log data to the file
-            logger.debug('[blue]##########End of save_removed_rows_to_raw_logs##########[/blue]')
         except Exception as e:
             logger.error(f'E in save_removed_rows_to_raw_logs: {e}', exc_info=True, stack_info=True)
 
@@ -342,26 +342,29 @@ class Manipulations():
 
     @staticmethod
     def processExclusionPairs(df: pd.DataFrame, filename: str, exclusion_pairs, log_file: str):
+        """The `processExclusionPairs` function takes a DataFrame, a filename, a dictionary of exclusion pairs,
+        and a log file as input, and processes the exclusion pairs by removing rows from the DataFrame that
+        match the specified values, logging the removed rows, and saving the potentially modified DataFrame
+        to a CSV file."""
         try:
             logger.info("[green]##########Processing exclusion pairs##########[/green]")
             for column, values_to_exclude in exclusion_pairs.items():
                 if column in df.columns:
                     logger.info(f"Column: {column} found in DataFrame. Values to exclude: {values_to_exclude}")
-                    # Correctly determine the rows to exclude
                     filter_condition = df[column].isin(values_to_exclude)
-                    # Capture the rows that will be removed (before actually removing them)
-                    removed_rows = df[filter_condition].copy()  # Use .copy() to avoid SettingWithCopyWarning
-                    # Log the removed rows if there are any
+                    # ! Capture the rows that will be removed
+                    removed_rows = df[filter_condition].copy()  # ? Use .copy() to avoid SettingWithCopyWarning
+                    # ? Log the removed rows if there are any
                     if not removed_rows.empty:
                         pattern = f"Exclusion: {values_to_exclude}"
                         FileHandler.save_removed_rows_to_raw_logs(removed_rows, column, pattern, log_file)
                         logger.info(f"Removed rows based on column '{column}' and pattern '{pattern}' have been logged to {log_file}")
-                    # Now, update df to exclude the rows
+                    # ? update df to exclude the rows
                     df = df[~filter_condition]
                     if df.empty:
                         logger.info("DataFrame is empty after exclusion.")
-                        break  # Exit the loop if df is empty
-                    # Identify columns that may be dropped due to becoming entirely NaN
+                        break  # ! Exit the loop if df is empty
+                    # ! Identify columns that may be dropped due to becoming entirely NaN
                     columns_before = set(df.columns)
                     df.dropna(axis=1, how='all', inplace=True)
                     columns_after = set(df.columns)
@@ -370,10 +373,9 @@ class Manipulations():
                         logger.debug(f"Columns dropped because they became empty after exclusion: {columns_dropped}")
                     else:
                         logger.warning("No columns were dropped after exclusion.")
-            # After processing, save the potentially modified df
+            # ! After processing, save the potentially modified df
             if not df.empty:
                 df.to_csv(filename, index=False)
-                logger.debug("[green]##########Exclusion pairs processing completed##########[/green]")
                 logger.debug(f"Modified DataFrame saved to {filename}")
             else:
                 logger.warning("DataFrame is empty after exclusions. Skipping saving to CSV.")
@@ -384,6 +386,9 @@ class Manipulations():
 
     @staticmethod
     def remove_patterns(dataframe, extraction_file, regex, string, key_col_to_val_patts) -> Any:
+        """The `remove_patterns` function takes a dataframe, extraction file, regex patterns, string patterns,
+        and key-value patterns as input, removes the specified patterns from the dataframe, and returns the
+        modified dataframe."""
         try:
             logger.debug('[yellow]##########Starting remove_patterns##########[/yellow]')
             df = dataframe
@@ -401,19 +406,17 @@ class Manipulations():
             logger.debug(regex_json_formatted)
             logger.debug('\nString patterns:')
             logger.debug(string_json_formatted)
-
             df = Manipulations.remove_regex_patterns(df, regex, string, columns_to_search, extraction_file)
             df = Manipulations.remove_key_value_patterns(df, key_col_to_val_patts, extraction_file)
-
             output += f"\nTotal rows Total Removed: {total_removed}:\nRemaining Rows: {len(df)}\n"
-
-            logger.debug('[yellow]##########Remove patterns completed##########[/yellow]')
             return df
         except Exception as e:
             logger.error(f'Error in remove_patterns: {e}', exc_info=True, stack_info=True)
 
     @staticmethod
-    def remove_regex_patterns(df, regex, string, columns_to_search, extraction_file):
+    def remove_regex_patterns(df, regex, string, columns_to_search, extraction_file) -> Any:
+        """The `remove_regex_patterns` function removes rows from a DataFrame that match specified regex
+        patterns in specified columns and saves the removed rows to a file."""
         logger.debug('[yellow]##########Starting remove_regex_patterns##########[/yellow]')
         total_removed = 0
         output = ""
@@ -447,7 +450,7 @@ class Manipulations():
         total_removed = 0
         output = ""
         for column, patterns in key_col_to_val_patts.items():
-            removed_count = 0  # Initialize removed_count at the start of the loop
+            removed_count = 0  # ! Initialize removed_count at the start of the loop
             logger.debug(f'Looking for column: {column} patterns {patterns} key_cl.items {key_col_to_val_patts.items()}')
             if column not in df.columns:
                 logger.warning(f'Column {column} not found in the dataframe.')
@@ -519,8 +522,13 @@ class ExcelOperations():
     @staticmethod
     def createFinalExcel(input_file: str, output_file: str, extraction_log_file: str, columns_to_be_dropped: List[str], final_column_order: List[str],
                          regex_patterns: Dict[str, str], string_patterns: Dict[str, str], col_to_val_patterns: Dict[str, str]) -> None:
+        """The `createFinalExcel` function takes an input file, applies various extraction patterns and
+        filters, and creates a final Excel file with specified column order and dropped columns."""
 
         def concatenate_values(row: pd.Series, columns: List[str], include_col_names: bool = False) -> str:
+            """The function `concatenate_values` takes a row of a pandas DataFrame, a list of column names, and an
+            optional flag to include column names, and returns a string concatenating the non-null values of the
+            specified columns."""
             if include_col_names:
                 return ', '.join([f'{col}: "{row[col]}"' for col in columns if pd.notna(row[col])])
             return ', '.join([f'"{row[col]}"' for col in columns if pd.notna(row[col])])
@@ -534,7 +542,7 @@ class ExcelOperations():
                 existing_cols = [col for col in info['cols'] if col in df.columns]
                 missing_cols = [col for col in info['cols'] if col not in df.columns]
                 if existing_cols:
-                    # Create new column by concatenating values from existing columns
+                    # ! Create new column by concatenating values from existing columns
                     df[col_name] = df.apply(lambda row, cols=existing_cols: concatenate_values(row, cols, info['include_names']), axis=1)  # pylint: disable=W0640
                     logger.info(f'New column "{col_name}" created with values from columns: {existing_cols} - Total rows: {df.shape[0]}')
                     if col_name != 'Qs':
@@ -544,7 +552,7 @@ class ExcelOperations():
                 if missing_cols:
                     logger.debug(f'Columns not found in "{col_name}": {missing_cols}')
             if columns_to_drop_due_to_concat:
-                # Drop columns that were used to create new columns
+                # ! Drop columns that were used to create new columns
                 df.drop(columns=columns_to_drop_due_to_concat, inplace=True)
                 dropped_columns = available_columns_before_drop - set(df.columns)
                 logger.debug(f'Columns dropped from concat: {columns_to_drop_due_to_concat}')
@@ -559,7 +567,7 @@ class ExcelOperations():
             logger.info(f'[green]Columns to be dropped started: {columns_to_be_dropped}[/green]')
             available_columns_before_drop2 = set(df.columns)
             cols_to_drop_from_func_def = [column for column in columns_to_be_dropped if column in df.columns]
-            # Drop columns specified in the function definition
+            # ! Drop columns specified in the function definition
             if cols_to_drop_from_func_def:
                 df.drop(columns=cols_to_drop_from_func_def, inplace=True)
                 dropped_columns2 = available_columns_before_drop2 - set(df.columns)
@@ -573,39 +581,42 @@ class ExcelOperations():
 
         def apply_final_column_order_and_save(df: pd.DataFrame, final_column_order: List[str], output_file: str,
                                               available_columns_before_drop: set) -> None:
+            """The function `apply_final_column_order_and_save` takes a DataFrame, a list of column names, an
+            output file path, and a set of available columns as input, applies the specified column order to the
+            DataFrame, saves the DataFrame to an Excel file, and logs the process."""
             final_order_logs = []
             final_order_logs += ['Final order started']
             final_order_logs += ['actual_final_order']
             actual_final_order = [col for col in final_column_order if col in df.columns]
-            final_order_logs += [str(actual_final_order)]  # Convert to string
+            final_order_logs += [str(actual_final_order)]
             final_order_logs += ['specified_columns']
             specified_columns = set(actual_final_order)
-            final_order_logs += [str(specified_columns)]  # Convert to string
+            final_order_logs += [str(specified_columns)]
             final_order_logs += ['unspecified_columns']
             unspecified_columns = available_columns_before_drop - specified_columns
-            final_order_logs += [str(unspecified_columns)]  # Convert to string
+            final_order_logs += [str(unspecified_columns)]
             final_order_logs += ['unspecified_columns']
             unspecified_columns = unspecified_columns - set(columns_to_be_dropped)
-            final_order_logs += [str(unspecified_columns)]  # Convert to string
+            final_order_logs += [str(unspecified_columns)]
             final_order_logs += ['final_columns_list']
 
             final_columns_list = actual_final_order + [col for col in list(unspecified_columns) if col in df.columns]
-            final_order_logs += [str(final_columns_list)]  # Convert to string
+            final_order_logs += [str(final_columns_list)]
             FINAL_ORDER_LOG_FILE = LOG_FOLDER + 'finalOrder.log'
             with open(FINAL_ORDER_LOG_FILE, 'w', encoding='utf-8') as f:
                 f.write('\n'.join(final_order_logs))
                 logger.info(f'Final order log file created: {FINAL_ORDER_LOG_FILE}')
             logger.info(f'Final columns list: {final_columns_list}')
             try:
-                # Subset df with the final columns list
+                # ! Subset df with the final columns list
                 df = df[final_columns_list]
 
-                # Proceed with saving the file
+                # ! Proceed with saving the file
                 df.to_excel(output_file, index=False)
                 logger.info(f'Excel file created: {output_file}')
             except KeyError as e:
                 logger.error(f"Error in applying final column order: {e}")
-                # Handle the error or perform additional logging as needed
+                # ! Handle the error or perform additional logging as needed
 
         df: pd.DataFrame = pd.read_excel(input_file)
         # ! Section 1
@@ -656,7 +667,6 @@ class ExcelOperations():
                 'include_names': True
             },
         }
-
         logger.debug('[red]########## Final Excel Creation Started #########[/red]')
         logger.debug(f'Dataframe loaded from file: {input_file}')
         logger.debug(f'Total Columns: {df_total_columns} - Total Rows: {df_total_rows}')
@@ -668,7 +678,6 @@ class ExcelOperations():
         logger.info('Manipulations.remove_patterns completed')
         # ! Section 2
         drop_and_create_columns(df, new_columns)
-
         # ! Section 3
         apply_final_column_order_and_save(df, final_column_order, output_file, available_columns_before_drop)
 
@@ -707,6 +716,8 @@ class BackupConfigurator():
 
     @staticmethod
     def copy_log_file(source_file, destination_file) -> LiteralString | Literal['Error: Log file not found']:
+        """The `copy_log_file` function copies a log file from a source file path to a destination file path
+        and returns a success message or an error message if the log file is not found."""
         log_file = 'applogs.log'
         log_file_path = source_file
         backup_log_file_path = destination_file
@@ -721,13 +732,14 @@ class BackupConfigurator():
 
     @staticmethod
     def create_backups(input_dir, backup_dir, query_name) -> None:
-        check_and_modify_permissions(backup_dir)  # Ensure this is defined or available in your script
+        """The `create_backups` function creates backups of specific file types in a given input directory,
+        using a unique filename based on the current timestamp and other parameters."""
+        check_and_modify_permissions(backup_dir)
         extensions_to_copy = ['.csv', '.json', '.xlsx', '.log', '.txt']
         files = os.listdir(input_dir)
         logger.info(f'input_dir {input_dir} - backup_dir {backup_dir}')
         logger.info(f'Files found: {files}')
         moved_files = []
-        # Load and process AZDIAG_CSV_FILEPATH_STR if it exists
         AZDIAG_CSV_FILEPATH_STR = 'AzDiag.csv'
         if AZDIAG_CSV_FILEPATH_STR in files:
             df = pd.read_csv(os.path.join(input_dir, AZDIAG_CSV_FILEPATH_STR))
@@ -741,13 +753,13 @@ class BackupConfigurator():
             for file in files:
                 filename, file_extension = os.path.splitext(file)
                 if file_extension in extensions_to_copy:
-                    # Check if "FINAL" should be included in the filename.
+                    # ! Check if "FINAL" should be included in the filename.
                     is_final = 'final' in filename.lower() or 'FINAL' in filename.lower()
                     final_suffix = "_FINAL" if is_final else ""
                     base_final_filename = f"{query_name}{final_suffix}_{first_timestamp}{file_extension}"
                     final_filename = base_final_filename
 
-                    # Ensure the filename is unique within the backup directory.
+                    # ! Ensure the filename is unique within the backup directory.
                     c_to = os.path.join(backup_dir, final_filename)
                     counter = 1
                     while os.path.exists(c_to):
@@ -763,10 +775,12 @@ class BackupConfigurator():
 
     @staticmethod
     def store_old_backups(input_dir, days_threshold=7) -> None:
+        """The `store_old_backups` function takes an input directory and a days threshold, and archives and
+            deletes folders that are older than the threshold."""
         backup_folders = [folder for folder, _, _ in os.walk(input_dir) if os.path.isdir(folder) and folder != input_dir]
         logger.debug(f'backup_folders: {backup_folders}')
         date_format = '%d-%m-%y'
-        date_folders = get_date_folders(input_dir, date_format)  # Ensure this is defined or available in your script
+        date_folders = get_date_folders(input_dir, date_format)
 
         for folder in date_folders:
             try:
@@ -786,6 +800,8 @@ class BackupConfigurator():
 
     @staticmethod
     def manage_backups(output_folder: str, query_name: str) -> None:
+        """The `manage_backups` function creates backup directories, performs backups, stores old backups, and
+        copies log files."""
         kql_backup_dir = f'{output_folder}/{query_name}'
         if Path(kql_backup_dir).is_dir():
             logger.info(f'Backup dir exists: {kql_backup_dir}')
@@ -806,7 +822,6 @@ class BackupConfigurator():
             if not Path(kql_backup_dir).is_dir():
                 Path(kql_backup_dir).mkdir(parents=True, exist_ok=True)
                 Path(backup_dir).mkdir(parents=True, exist_ok=True)
-
         try:
             SRC_LOG_FILE = f'{LOG_FOLDER}/applogs.log'
             DEST_LOG_FILE = f'{backup_dir}/applogs.log'
@@ -821,6 +836,9 @@ class BackupConfigurator():
 
 
 def remove_files_from_folder(folder, file_extension) -> None:
+    """Removes files with a specific file extension from a given folder.
+    Args:folder (str): The path to the folder from which files will be removed.
+        file_extension (str or Tuple[str]): The file extension(s) of the files to be removed."""
     try:
         files_to_remove = []
         for datafiles in os.listdir(folder):
@@ -842,6 +860,19 @@ def remove_files_from_folder(folder, file_extension) -> None:
 def process_data(AZDIAG_JSON_FILEPATH_STR, AZDIAG_CSV_FILEPATH_STR, AZDIAG_EXTRACTIONLOGS_FILEPATH_STR, AZDIAG_EXCEL_FILEPATH,
                  AZDIAG_EXCEL_FINAL_FILEPATH, CL_INIT_ORDER, CL_DROPPED, AZDIAG_REGEX, AZDIAG_STRINGS, MATCH_VALUE_TO_SPECIFIC_COLUMN,
                  EXCLUSION_PAIRS, CL_FINAL_ORDER) -> None:
+    """Process data by reading JSON data, saving tables as CSV files, adding a local time column, creating an Excel file, and creating a final Excel file.
+    Args: AZDIAG_JSON_FILEPATH_STR (str): File path of the JSON data.
+        AZDIAG_CSV_FILEPATH_STR (str): File path to save the CSV file.
+        AZDIAG_EXTRACTIONLOGS_FILEPATH_STR (str): File path to save extraction logs.
+        AZDIAG_EXCEL_FILEPATH (str): File path to save the initial Excel file.
+        AZDIAG_EXCEL_FINAL_FILEPATH (str): File path to save the final Excel file.
+        CL_INIT_ORDER (List[str]): List of column names for initial column order.
+        CL_DROPPED (List[str]): List of column names to be dropped.
+        AZDIAG_REGEX (Dict[str, str]): Dictionary of regex patterns.
+        AZDIAG_STRINGS (Dict[str, str]): Dictionary of string patterns.
+        MATCH_VALUE_TO_SPECIFIC_COLUMN (Dict[str, str]): Dictionary of column-value patterns.
+        EXCLUSION_PAIRS (Dict[str, str]): Dictionary of exclusion pairs.
+        CL_FINAL_ORDER (List[str]): List of column names for final column order."""
     try:
         json_data = FileHandler.read_json(filename=AZDIAG_JSON_FILEPATH_STR)
         if 'tables' in json_data:
@@ -885,6 +916,8 @@ def process_data(AZDIAG_JSON_FILEPATH_STR, AZDIAG_CSV_FILEPATH_STR, AZDIAG_EXTRA
 
 
 def check_and_modify_permissions(path) -> None:
+    """Check and modify the permissions of the given path.
+    Args: path: The path to check and modify permissions for."""
     try:
         if not os.access(path, os.W_OK):
             logger.info(f"Write permission not enabled on {path}. Attempting to modify.")
@@ -912,19 +945,24 @@ def get_date_folders(input_dir, date_format='%d-%m-%y') -> list[Any]:  # for bac
     date_folders = []
     for root, dirs, _ in os.walk(input_dir):
         for dir_name in dirs:
-            # Check if the last part of the path is a date
             if is_date_string(dir_name, date_format):
                 folder_path = os.path.join(root, dir_name)
                 date_folders.append(folder_path)
     return date_folders
 
 
-def validate_time_format(time_str) -> bool:
-    """Validates if the time string includes a time unit (m, h, d, w). Returns True if valid, False otherwise."""
-    return bool(re.match(r'^\d+[mhdw]$', time_str))
-
-
 def format_query(query_name, ip1=None, ip2=None, timeago=None, iplist=None, start_t=None, end_t=None) -> str:  # pylint: disable=unused-argument # noqa: W0613
+    """Formats a query based on the given parameters.
+    Parameters:
+    - query_name: The name of the query.
+    - ip1: The value for IP1 (optional).
+    - ip2: The value for IP2 (optional).
+    - timeago: The value for TIMEAGO (optional).
+    - iplist: The list of IPs (optional).
+    - start_t: The start time (optional).
+    - end_t: The end time (optional).
+    Returns:
+    - str: The formatted query."""
     query_param_map = {
         "AZDIAG_IP1IP2TIMEAGO": {
             "IP1": ip1,
@@ -966,6 +1004,7 @@ def format_query(query_name, ip1=None, ip2=None, timeago=None, iplist=None, star
 
 def select_query() -> Any | Literal['AZDIAG_IP1IP2TIMEAGO', 'AZDIAG_TIMEAGO', 'APPREQ_TIMEAGO', 'APPPAGE_TIMEAGO', 'APPBROWSER_TIMEAGO',
                                     'APPSERVHTTPLogs_TIMEAGO', 'APPSERVIPSecTIMEAGO']:
+    """Selects a query from a list of options and returns the chosen query."""
     logger.info('Select query')
     logger.info('1. AZDIAG_IP1IP2TIMEAGO')
     logger.info('2. AZDIAG_TIMEAGO')
@@ -999,7 +1038,7 @@ def select_query() -> Any | Literal['AZDIAG_IP1IP2TIMEAGO', 'AZDIAG_TIMEAGO', 'A
     return select_query()
 
 
-def validate_time_format_AZURE(time_str):
+def validate_time_format_AZURE(time_str) -> bool:
     """Validate if the input string matches Azure's expected date-time formats."""
     try:
         # Attempt to parse the datetime string
@@ -1010,7 +1049,12 @@ def validate_time_format_AZURE(time_str):
         return False
 
 
-def input_datetime_with_validation(prompt):
+def validate_time_format(time_str) -> bool:
+    """Validates if the time string includes a time unit (m, h, d, w). Returns True if valid, False otherwise."""
+    return bool(re.match(r'^\d+[mhdw]$', time_str))
+
+
+def input_datetime_with_validation(prompt) -> str:
     """Prompt the user for a datetime input and validate or adjust it to a proper format."""
     while True:
         input_time = input(prompt)
@@ -1022,6 +1066,8 @@ def input_datetime_with_validation(prompt):
 
 def get_query_input() -> tuple[Any | Literal['AZDIAG_IP1IP2TIMEAGO', 'AZDIAG_TIMEAGO', 'AZDIAG_TIMEBETWEEN', 'APPREQ_TIMEAGO', 'APPPAGE_TIMEAGO',
                                              'APPBROWSER_TIMEAGO', 'APPSERVHTTPLogs_TIMEAGO', 'APPSERVIPSecTIMEAGO'], str]:
+    """Get user input for selecting and formatting a query.
+    Returns:tuple: A tuple containing the selected query name and the formatted query content."""
     query_choice = select_query()
     query_name = query_choice
     ip1 = ip2 = None
@@ -1078,6 +1124,8 @@ a7 = 'APPSERVIPSecTIMEAGO'
 
 
 def main() -> None:
+    """The main function loads configurations, processes data from either a local file or an API, and
+    manages backups."""
     excel_config, regex_config, az_config = load_configurations()
     excel_config = cast(ExcelConfigurations, excel_config)
     regex_config = cast(RegexConfigurations, regex_config)
