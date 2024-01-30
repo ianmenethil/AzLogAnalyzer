@@ -6,12 +6,10 @@ import logging
 import inspect
 import shutil
 import sys
-from time import sleep
 from pathlib import Path
 import os
 import stat
 import re
-from dateutil import parser
 import pytz
 import pandas as pd
 from pandas import DataFrame
@@ -20,7 +18,11 @@ import httpx
 from convertTime import convert_utc_to_sydney
 from configurator import excelConfigurator, regexConfigurator, load_kql_queries, setup_logging, load_config_from_file, jprint, console
 from headerComparer import compare_and_write_output
-# from frMOD import FileHeaderReader
+
+
+def LF() -> None:
+    print('\n')
+
 
 OUTPUT_FOLDER: str = 'AZLOGS'
 LOG_FOLDER: str = f'{OUTPUT_FOLDER}/LOG'
@@ -91,18 +93,12 @@ class APIManager():
     def get_logs_from_azure_analytics(query, headers, zen_endpoint) -> Any | dict:  # ! API call to get logs
         """The `get_logs_from_azure_analytics` function makes an API call to retrieve logs from Azure Analytics
         and returns the response as a JSON object."""
-
         try:
-            logger.info(f"Log endpoint:{zen_endpoint}")
             json.dumps(headers)
             headers['Content-Type'] = 'application/json'
             response = httpx.post(url=zen_endpoint, data=query, headers=headers)
             response.raise_for_status()
-            logger.info(f"Response URL: {response.url}")
             logger.info(f"Response Status Code: {response.status_code}")
-            # logger.info(f'{response.text[:10]}')
-            # logger.info(f'{response.text[-10:]}')
-            # logger.info(f'Response Headers: {response.headers}')
             return response.json()
         except httpx.HTTPError as e:
             logger.error(f"HTTP error occurred: {e}", exc_info=True, stack_info=True, extra={'color': 'red'}, stacklevel=2)
@@ -126,8 +122,6 @@ class APIManager():
             response.raise_for_status()
             token_response = response.json()
             FileHandler.save_json(token_response, token_file)
-            logger.info(f"New token RAW response saved to file {token_file}.")
-            token_response = response.json()
             return token_response
         except httpx.HTTPError as e:
             logger.error(f"HTTP error occurred: {e}", exc_info=True, stack_info=True, extra={'color': 'red'}, stacklevel=2)
@@ -151,19 +145,15 @@ class APIManager():
         query_name, query_content = UserInputHandler.get_query_input()
         KQL = json.dumps({"query": query_content})
         logger.info(f'Active [yellow]Query Name:[/yellow] [red]{query_name}[/red]')
-        cS.lf()
-        # logger.warning('\nActive [yellow]Query([red]JSON[/red]):[/yellow]')
-        # Shotcuts.CRLF()
-        # jprint(KQL)
-        # Shotcuts.CRLF()
+        LF()
         console.print('([red]Formatted[/red] Query):', style="blue blink", justify="left")
-        cS.lf()
+        LF()
         console.print(query_content, style="white", justify="left")
-        cS.lf()
+        LF()
         console.print('IS THE QUERY CORRECT?', style="green bold", justify="left")
-        cS.lf()
+        LF()
         correct_query = input(f'Query name: {query_name} Enter to continue, or type anything to exit...')
-        cS.lf()
+        LF()
         if correct_query == '':
             logger.info(f'Proceed with: {query_name}')
         else:
@@ -246,24 +236,23 @@ class FileHandler():
             return 'Failed to read JSON file'
 
     @staticmethod
-    def saveTablesResponseToCSV(json_data, filename: str, exclusion_pairs: dict, log_file: str):
+    def DF_to_CSV_dropna(json_data, filename: str, exclusion_pairs: dict, log_file: str):
         """The `saveTablesResponseToCSV` function takes a JSON response containing tables, converts them into pandas DataFrames, drops any blank columns, and saves the resulting DataFrames as CSV files."""
         try:
             if 'tables' in json_data:
                 for table in json_data['tables']:
-                    logger.debug(f"Table name: {table['name']}")
                     df = pd.DataFrame(table['rows'], columns=[col['name'] for col in table['columns']])
                     DataFrameManipulator.find_duplicate_columns(df)
                     dataframe_row_length = len(df)
                     dataframe_column_length = len(df.columns)
-                    logger.info(f'DataFrame Rows: {dataframe_row_length} - DataFrame Columns: {dataframe_column_length}')
+                    logger.info(f'DF Rows: {dataframe_row_length} - DF Columns: {dataframe_column_length}')
                     df = DataFrameManipulator.processExclusionPairs(df, filename, exclusion_pairs, log_file)
                     logger.info("Proces exclusion pairs completed.")
                     if df is None or df.empty:
                         logger.warning("DataFrame is empty. Exiting")
                         sys.exit()
                     if dataframe_row_length != len(df):
-                        logger.info(f'New dataframe row and column count: {len(df)} x {len(df.columns)}')
+                        logger.info(f'New DF row and column count: {len(df)} x {len(df.columns)}')
                         logger.info(f'Difference afer exclusion pairs: {dataframe_row_length - len(df)} rows')
                     original_list_of_columns = df.columns.tolist()
                     original_list_of_columns_count = len(original_list_of_columns)
@@ -272,8 +261,6 @@ class FileHandler():
                     logger.info(f'Original col count {original_list_of_columns_count} - After dropna col count {len(df.columns.tolist())}')
                     logger.debug(f'Dropped: {len(original_list_of_columns) - len(df.columns.tolist())} columns')
                     after_drop_list_of_columns = df.columns.tolist()
-
-                    # dropped_columns = "\n".join([col for col in original_list_of_columns if col not in after_drop_list_of_columns])  # ? NOTE
                     # yapf: disable
                     if dropped_columns := "\n".join(
                         [
@@ -286,12 +273,12 @@ class FileHandler():
                         droppped_columns_count = len([col for col in original_list_of_columns if col not in after_drop_list_of_columns])
                         if dropped_columns:
                             logger.debug(f'Count: {droppped_columns_count}')
-                            cS.lf()
+                            LF()
                             logger.debug(f'Dropped columns:{dropped_columns}')
                         else:
                             logger.info('No cols dropped')
                     df.to_csv(filename, index=False, encoding='utf-8')
-                    DataFrameManipulator.find_duplicate_columns(df)
+                    # DataFrameManipulator.find_duplicate_columns(df)
                     return True
             else:
                 logger.warning("No tables found in response.")
@@ -304,21 +291,21 @@ class FileHandler():
     def read_csv_add_LT_col_write_csv(input_file, source_col, dest_col, output_file, dropped_cols, initOrder_cols) -> None:
         """The `read_csv_add_LT_col_write_csv` function reads a CSV file, adds a new column based on a
         specified source column, drops specified columns, reorders the columns based on an initial order,
-        checks for duplicate columns, and saves the modified DataFrame to a new CSV file."""
+        checks for duplicate columns, and saves the modified DF to a new CSV file."""
         try:
             df = pd.read_csv(input_file, low_memory=False)
             logger.info(f"source_col: {source_col} | dest_col: {dest_col}")
 
             new_column_data = df[source_col].apply(convert_utc_to_sydney)
             if source_col not in df.columns:
-                logger.warning(f"Column {source_col} not found in DataFrame.")
+                logger.warning(f"Column {source_col} not found in DF.")
             else:
                 df.insert(0, dest_col, new_column_data)
 
             # ! Drop specified columns if they exist
             df = df.drop(columns=[col for col in dropped_cols if col in df.columns], errors='ignore')
 
-            # ! Ensure initial order columns are in the DataFrame and add them first to new_order
+            # ! Ensure initial order columns are in the DF and add them first to new_order
             new_order = [col for col in initOrder_cols if col in df.columns]
 
             # ! Add remaining columns that were not specified in initOrder_cols
@@ -342,11 +329,22 @@ class FileHandler():
         except Exception as e:
             logger.error(f'Error in processing data: {e}', exc_info=True, stack_info=True)
 
+    # @staticmethod
+    # def save_raw_logs(data: str, filename: str) -> None:
+    #     try:
+    #         log_entry = {
+    #             'timestamp': datetime.now().isoformat(),
+    #             'level': logging.getLevelName(logging.getLogger().level),
+    #             'message': data,
+    #             'function': inspect.currentframe().f_back.f_code.co_name if inspect.currentframe().f_back else None
+    #         }
+    #         with open(filename, "w", encoding="utf-8") as f:
+    #             f.write(json.dumps(log_entry) + "\n")
+    #     except Exception as e:
+    #         logging.error(f"Error saving raw logs: {e}", exc_info=True, stack_info=True)
+
     @staticmethod
     def save_raw_logs(data: str, filename: str) -> None:
-        """ Save raw logs to a file.
-        Args:   data (str): The raw log data to be saved.
-                filename (str): The name of the file to save the logs to."""
         try:
             logger.debug(f"Saving raw logs to file: {filename}")
             calling_function = None
@@ -357,28 +355,22 @@ class FileHandler():
                     logger.debug(f"Calling function: {calling_function}")
                 else:
                     logger.warning("No calling function found.")
-            with open(filename, "a", encoding="utf-8") as f:
+            with open(filename, "w", encoding="utf-8") as f:
                 f.write(f"Calling function: {calling_function}\n")
+                f.write("\n")
                 f.write(data)
         except IOError as e:
             logger.error(f"Error saving raw logs: {e}", exc_info=True, stack_info=True, extra={'color': 'red'}, stacklevel=2)
 
     @staticmethod
     def save_removed_rows_to_raw_logs(removed_rows, column, pattern, filename) -> None:
-        """The `save_removed_rows_to_raw_logs` function saves the removed rows from a DataFrame to a log file, including additional information for each row. Each removed row is appended to the log file, along with additional information if available.
-        Args:   removed_rows (DataFrame): The DataFrame containing the removed rows.
-                column (str): The name of the column from which the rows were removed.
-                pattern (str): The pattern used to remove the rows.
-                filename (str): The name of the log file to save the removed rows."""
         try:
             removed_count = len(removed_rows)
             log_data = f"Column: '{column}', Pattern: '{pattern}', Removed Rows Count: {removed_count}\n"  # ! Initialize the log data string
+            LF()
             for _, row in removed_rows.iterrows():
-                log_data += "Removed Row:"  # ! Append the removed row to the log data
-                log_data += "\n"
                 log_data += f"{row[column]}"  # ! Append the removed row to the log data
                 additional_columns = [KEYSEARCH_requestQuery_s, KEYSEARCH_originalRequestUriWithArgs_s, KEYSEARCH_requestUri_s]  # ! Define additional columns to capture
-
                 # additional_info = []
                 # for col in additional_columns:
                 #     if col in row:
@@ -403,15 +395,14 @@ class DataFrameManipulator():
 
     @staticmethod
     def processExclusionPairs(df: pd.DataFrame, filename: str, exclusion_pairs, log_file: str) -> Any | DataFrame:
-        """The `processExclusionPairs` function takes a DataFrame, a filename, a dictionary of exclusion pairs,
-        and a log file as input, and processes the exclusion pairs by removing rows from the DataFrame that
-        match the specified values, logging the removed rows, and saving the potentially modified DataFrame
+        """The `processExclusionPairs` function takes a DF, a filename, a dictionary of exclusion pairs,
+        and a log file as input, and processes the exclusion pairs by removing rows from the DF that
+        match the specified values, logging the removed rows, and saving the potentially modified DF
         to a CSV file."""
         try:
-            logger.info("[green]##########Processing exclusion pairs##########[/green]")
             for column, values_to_exclude in exclusion_pairs.items():
                 if column in df.columns:
-                    logger.info(f"Column: {column} found in DataFrame. Values to exclude: {values_to_exclude}")
+                    logger.info(f"Column: {column} found in DF. Values to exclude: {values_to_exclude}")
                     filter_condition = df[column].isin(values_to_exclude)
                     # ! Capture the rows that will be removed
                     removed_rows = df[filter_condition].copy()  # ? Use .copy() to avoid SettingWithCopyWarning
@@ -438,7 +429,7 @@ class DataFrameManipulator():
             # ! After processing, save the potentially modified df
             if not df.empty:
                 df.to_csv(filename, index=False)
-                logger.debug(f"Modified DataFrame saved to {filename}")
+                logger.debug(f"Modified DF saved to {filename}")
             else:
                 logger.warning("DataFrame is empty after exclusions. Skipping saving to CSV.")
             return df
@@ -448,19 +439,18 @@ class DataFrameManipulator():
 
     @staticmethod
     def find_duplicate_columns(df) -> Any:
-        """The function `find_duplicate_columns` takes a DataFrame as input and returns a list of duplicate
+        """The function `find_duplicate_columns` takes a DF as input and returns a list of duplicate
         column names."""
         duplicate_columns = df.columns[df.columns.duplicated()]
-        logger.info(f"Duplicate columns: {duplicate_columns.tolist()}")
+        # logger.info(f"Duplicate columns: {duplicate_columns.tolist()}")
         return duplicate_columns.tolist()
 
     @staticmethod
     def remove_patterns(dataframe, extraction_file, regex, string, key_col_to_val_patts) -> Any:
-        """The `remove_patterns` function takes a dataframe, extraction file, regex patterns, string patterns,
-        and key-value patterns as input, removes the specified patterns from the dataframe, and returns the
-        modified dataframe."""
+        """The `remove_patterns` function takes a DF, extraction file, regex patterns, string patterns,
+        and key-value patterns as input, removes the specified patterns from the DF, and returns the
+        modified DF."""
         try:
-            logger.debug('[yellow]##########Starting remove_patterns##########[/yellow]')
             df = dataframe
             columns_to_search = [KEYSEARCH_originalRequestUriWithArgs_s, KEYSEARCH_requestQuery_s, KEYSEARCH_requestUri_s]
             total_removed = 0
@@ -485,16 +475,15 @@ class DataFrameManipulator():
 
     @staticmethod
     def remove_regex_patterns(df, regex, string, columns_to_search, extraction_file) -> Any:
-        """The `remove_regex_patterns` function removes rows from a DataFrame that match specified regex
+        """The `remove_regex_patterns` function removes rows from a DF that match specified regex
         patterns in specified columns and saves the removed rows to a file."""
-        logger.debug('[yellow]##########Starting remove_regex_patterns##########[/yellow]')
         total_removed = 0
         output = ""
         for pattern in regex + string:
             logger.debug(f'Looking for pattern: {pattern} in columns: {columns_to_search}')
             for column in columns_to_search:
                 if column not in df.columns:
-                    logger.debug(f'Column {column} not found in the dataframe.')
+                    logger.debug(f'Column {column} not found in the DF.')
                     continue
                 pattern_filter = df[column].str.contains(pattern, na=False, regex=True)
                 removed_rows = df[pattern_filter]
@@ -510,12 +499,11 @@ class DataFrameManipulator():
                 df = df[~pattern_filter]
                 removed_count = len(removed_rows)
                 total_removed += removed_count
-        logger.debug('[yellow]##########End of remove_regex_patterns##########[/yellow]')
         return df
 
     @staticmethod
     def remove_key_value_patterns(df, key_col_to_val_patts, extraction_file):
-        """The `remove_key_value_patterns` function removes rows from a dataframe based on specified key-value patterns in specific columns and logs the removed rows."""
+        """The `remove_key_value_patterns` function removes rows from a DF based on specified key-value patterns in specific columns and logs the removed rows."""
         logger.debug('[yellow]##########Key Value Removals Started##########[/yellow]')
         total_removed = 0
         output = ""
@@ -523,7 +511,7 @@ class DataFrameManipulator():
             removed_count = 0  # ! Initialize removed_count at the start of the loop
             logger.debug(f'Looking for column: {column} patterns {patterns} key_cl.items {key_col_to_val_patts.items()}')
             if column not in df.columns:
-                logger.warning(f'Column {column} not found in the dataframe.')
+                logger.warning(f'Column {column} not found in the DF.')
                 continue
             logger.debug(f"Processing column: {column} with patterns: {patterns}")
             for pattern in patterns:
@@ -570,13 +558,13 @@ class ExcelManager():
                     ExcelManager.format_excel_file(writer, df)
                     logger.debug(f'Excel formatted and created: {output_excel_file}')
             else:
-                logger.warning('Dataframe is empty')
+                logger.warning('DF is empty')
         except Exception as e:
             logger.error(f'E in create_excel: {e}', exc_info=True, stack_info=True, extra={'color': 'red'}, stacklevel=2)
 
     @staticmethod
     def format_excel_file(writer, df) -> None:
-        """The `format_excel_file` function formats an Excel file by setting the font, font size, and column width for each column in a given DataFrame."""
+        """The `format_excel_file` function formats an Excel file by setting the font, font size, and column width for each column in a given DF."""
         try:
             workbook = writer.book
             worksheet = writer.sheets['Sheet1']
@@ -596,7 +584,7 @@ class ExcelManager():
         filters, and creates a final Excel file with specified column order and dropped columns."""
 
         def concatenate_values(row: pd.Series, columns: List[str], include_col_names: bool = False) -> str:
-            """The function `concatenate_values` takes a row of a pandas DataFrame, a list of column names, and an
+            """The function `concatenate_values` takes a row of a pandas DF, a list of column names, and an
             optional flag to include column names, and returns a string concatenating the non-null values of the
             specified columns."""
             if include_col_names:
@@ -604,9 +592,9 @@ class ExcelManager():
             return ', '.join([f'"{row[col]}"' for col in columns if pd.notna(row[col])])
 
         def drop_and_create_columns(df: pd.DataFrame, new_columns: Dict[str, Dict[str, Any]]) -> pd.DataFrame:
-            """The function `drop_and_create_columns` takes a DataFrame and a dictionary of new columns as input,
-            creates new columns based on existing columns in the DataFrame, drops columns that were used to
-            create the new columns, and returns the modified DataFrame."""
+            """The function `drop_and_create_columns` takes a DF and a dictionary of new columns as input,
+            creates new columns based on existing columns in the DF, drops columns that were used to
+            create the new columns, and returns the modified DF."""
             logger.info('[red]########### columns_to_drop started ###########[/red]')
             for col_name, info in new_columns.items():
                 existing_cols = [col for col in info['cols'] if col in df.columns]
@@ -650,9 +638,9 @@ class ExcelManager():
             return df
 
         def apply_final_column_order_and_save(df: pd.DataFrame, final_column_order: List[str], output_file: str, available_columns_before_drop: set) -> None:
-            """The function `apply_final_column_order_and_save` takes a DataFrame, a list of column names, an
+            """The function `apply_final_column_order_and_save` takes a DF, a list of column names, an
             output file path, and a set of available columns as input, applies the specified column order to the
-            DataFrame, saves the DataFrame to an Excel file, and logs the process."""
+            DF, saves the DF to an Excel file, and logs the process."""
             final_order_logs = []
             final_order_logs += ['Final order started']
             final_order_logs += ['actual_final_order']
@@ -735,7 +723,7 @@ class ExcelManager():
             },
         }
         logger.debug('[red]########## Final Excel Creation Started #########[/red]')
-        logger.debug(f'Dataframe loaded from file: {input_file}')
+        logger.debug(f'DF loaded from file: {input_file}')
         logger.debug(f'Total Columns: {df_total_columns} - Total Rows: {df_total_rows}')
         df = DataFrameManipulator.remove_patterns(dataframe=df,
                                                   extraction_file=extraction_log_file,
@@ -929,15 +917,11 @@ class DataProcessor():
         try:
             json_data = FileHandler.read_json(filename=AZDIAG_JSON_FILEPATH_STR)
             if 'tables' in json_data:
-                saveData = FileHandler.saveTablesResponseToCSV(json_data=json_data,
+                saveData = FileHandler.DF_to_CSV_dropna(json_data=json_data,
                                                                filename=AZDIAG_CSV_FILEPATH_STR,
                                                                exclusion_pairs=EXCLUSION_PAIRS,
                                                                log_file=AZDIAG_EXTRACTIONLOGS_FILEPATH_STR)
-
-                if saveData := FileHandler.saveTablesResponseToCSV(json_data=json_data,
-                                                                   filename=AZDIAG_CSV_FILEPATH_STR,
-                                                                   exclusion_pairs=EXCLUSION_PAIRS,
-                                                                   log_file=AZDIAG_EXTRACTIONLOGS_FILEPATH_STR):
+                if saveData:
                     logger.debug(f'CSV file created: {AZDIAG_CSV_FILEPATH_STR}')
                 else:
                     logger.debug(f'CSV file not created: {AZDIAG_CSV_FILEPATH_STR}. Exiting...')
@@ -951,7 +935,6 @@ class DataProcessor():
                                                               initOrder_cols=CL_INIT_ORDER)
                     logger.debug(f'LT column added to {AZDIAG_CSV_FILEPATH_STR}')
 
-                    logger.debug(f'excelCreate: Input {AZDIAG_CSV_FILEPATH_STR} | Output {AZDIAG_EXCEL_FILEPATH}')
                     ExcelManager.excelCreate(input_csv_file=AZDIAG_CSV_FILEPATH_STR,
                                              output_excel_file=AZDIAG_EXCEL_FILEPATH,
                                              extraction_log_file=AZDIAG_EXTRACTIONLOGS_FILEPATH_STR,
@@ -1037,26 +1020,26 @@ class UserInputHandler():
     @staticmethod
     def list_choices() -> None:
         console.print('[red]Select query[/red]', style='bold', justify='center', markup=True)
-        cS.lf()
+        LF()
         console.print('[yellow]#' * 30 + 'AzureDiagnostics' + '#[/yellow]' * 30, style='bold', justify='center', markup=True)
         console.print('1. [blue]AZDIAG_IP1IP2_TIMEAGO[/blue]', style='italic', justify='center', markup=True)
         console.print('2. [blue]AZDIAG_TIMEBETWEEN[/blue]', style='blink', justify='center', markup=True)
         console.print('3. [blue]AZDIAG_IP_TIMEBETWEEN[/blue]', style='blink', justify='center', markup=True)
         console.print('4. [blue]AZDIAG_TIMEAGO[/blue]', style='blink', justify='center', markup=True)
-        cS.lf()
+        LF()
         console.print('[yellow]#' * 30 + 'AppRequests' + '#[/yellow]' * 30, style='bold', justify='center', markup=True)
         console.print('5. [blue]APPREQ_TIMEAGO - not yet[/blue]', style='blink', justify='center', markup=True)
-        cS.lf()
+        LF()
         console.print('[yellow]#' * 30 + 'AppPages' + '#[/yellow]' * 30, style='bold', justify='center', markup=True)
         console.print('6. [blue]APPPAGE_TIMEAGO - not yet[/blue]', style='blink', justify='center', markup=True)
-        cS.lf()
+        LF()
         console.print('[yellow]#' * 30 + 'AppBrowser' + '#[/yellow]' * 30, style='bold', justify='center', markup=True)
         console.print('7. [blue]APPBROWSER_TIMEAGO - not yet[/blue]', style='blink', justify='center', markup=True)
-        cS.lf()
+        LF()
         console.print('[yellow]#' * 30 + 'AppServiceHTTPLogs' + '#[/yellow]' * 30, style='bold', justify='center', markup=True)
         console.print('8. [blue]HTTPLogs_TIMEAGO[/blue]', style='blink', justify='center', markup=True)
         console.print('9. [blue]HTTPLogs_TIMEBETWEEN[/blue]', style='blink', justify='center', markup=True)
-        cS.lf()
+        LF()
         console.print('[yellow]#' * 30 + 'AppServiceIPSec' + '#[/yellow]' * 30, style='bold', justify='center', markup=True)
         console.print('10. [blue]APPSERVIPSec_TIMEAGO - not yet[/blue]', style='blink', justify='center', markup=True)
         console.print('0. [magenta]Exit[/magenta]', style='blink', justify='center', markup=True)
@@ -1143,52 +1126,52 @@ class UserInputHandler():
             while True:
                 logger.info(f'NOWINSYDNEY: {NOWINSYDNEY}')
                 logger.info('Enter Sydney time, will convert to az')
-                STARTTIME = UserInputHandler.input_datetime_with_validation('Start time(Enter sydney time: Format must be: 30-01-24 18:42:11 ')
+                STARTTIME = UserInputHandler.input_datetime_with_validation(f'FORMAT{NOWINSYDNEY} Starttime: ')
                 if TimeUtils.validate_starttime_endtime(STARTTIME):
                     STARTTIME = TimeUtils.convert_syd_to_aztime(STARTTIME)
                     logger.info(f'Converted STARTTIME: {STARTTIME}')
                     break
                 logger.info('Format must be: 30-01-24 18:42:11')
             while True:
-                ENDTIME = UserInputHandler.input_datetime_with_validation('End time(Example Format: 30-01-24 18:42:11')
+                ENDTIME = UserInputHandler.input_datetime_with_validation(f'FORMAT{NOWINSYDNEY} | Endtime:')
                 if TimeUtils.validate_starttime_endtime(ENDTIME):
                     ENDTIME = TimeUtils.convert_syd_to_aztime(ENDTIME)
                     logger.info(f'Converted STARTTIME: {ENDTIME}')
                     break
-                logger.info('Format: 30-01-24 18:42:11')
+                logger.info(f'Format must be: {NOWINSYDNEY}')
             query_content = QueryFormatter.format_query(query_name, start_t=STARTTIME, end_t=ENDTIME, singleip=single_ip, whitelist=WHITELIST_IPs)
 
         elif query_name == "AZDIAG_TIMEBETWEEN":
             logger.info('AZDIAG_TIMEBETWEEN')
             while True:
-                STARTTIME = UserInputHandler.input_datetime_with_validation('Start time(Example fmt 2024-01-28T17:57:38Z): ')
+                STARTTIME = UserInputHandler.input_datetime_with_validation(f'FORMAT{NOWINSYDNEY} Starttime: ')
                 if TimeUtils.validate_starttime_endtime(STARTTIME):
                     break
-                logger.info('Format must be: 30-01-24 18:42:11')
+                logger.info(f'Format must be: {NOWINSYDNEY}')
             while True:
-                ENDTIME = UserInputHandler.input_datetime_with_validation('End time(Example fmt 2024-01-28T17:57:38Z: ')
+                ENDTIME = UserInputHandler.input_datetime_with_validation(f'FORMAT{NOWINSYDNEY} | Endtime:')
                 if TimeUtils.validate_starttime_endtime(ENDTIME):
                     break
-                logger.info('Format must be: 30-01-24 18:42:11')
+                logger.info(f'Format must be: {NOWINSYDNEY}')
             query_content = QueryFormatter.format_query(query_name, start_t=STARTTIME, end_t=ENDTIME, whitelist=WHITELIST_IPs)
 
         elif query_name == "HTTPLogs_TIMEBETWEEN":
             logger.info('HTTPLogs_TIMEBETWEEN')
             while True:
-                STARTTIME = UserInputHandler.input_datetime_with_validation('Start time(Example fmt 2024-01-28T17:57:38Z): ')
+                STARTTIME = UserInputHandler.input_datetime_with_validation(f'FORMAT{NOWINSYDNEY} Starttime: ')
                 if TimeUtils.validate_starttime_endtime(STARTTIME):
                     break
-                logger.info('Format must be: 30-01-24 18:42:11')
+                logger.info(f'Format must be: {NOWINSYDNEY}')
             while True:
-                ENDTIME = UserInputHandler.input_datetime_with_validation('End time(Example fmt 2024-01-28T17:57:38Z: ')
+                ENDTIME = UserInputHandler.input_datetime_with_validation(f'FORMAT{NOWINSYDNEY} | Endtime:')
                 if TimeUtils.validate_starttime_endtime(ENDTIME):
                     break
-                logger.info('Format must be: 30-01-24 18:42:11')
+                logger.info(f'Format must be: {NOWINSYDNEY}')
             query_content = QueryFormatter.format_query(query_name, start_t=STARTTIME, end_t=ENDTIME, whitelist=WHITELIST_IPs)
 
         else:
-            logger.info('Else: section ')
-            timeago = input('Else: Enter value for TIMEAGO (e.g., 10m, 2h, 1d): ')
+            console.print('Else: section ', style='bold', justify='center', markup=True)
+            timeago = input('Else: Enter value for TIMEAGO(10m) (2h) (1d): ')
             while not TimeUtils.validate_timeago_variable(timeago):
                 logger.info('Invalid format. Please include (m)inutes, (h)ours, (d)ays, or (w)eeks. E.g., "10m" for 10 minutes.')
                 timeago = input('Enter value for TIMEAGO (e.g., 10m, 2h, 1d): ')
@@ -1264,18 +1247,6 @@ class QueryFormatter():
         return 'Not Found'
 
 
-class cS():  # ! Shotcuts
-
-    @staticmethod
-    def lf() -> None:  # ! CRLF - Linefeed
-        console.print('\r\n')
-
-    @staticmethod
-    def S(t: float = 0.5) -> None:
-        sleep(t)
-        console.print(f'Sleepy time Zzz{t}...')
-
-
 # ! TIME
 time_info = TimeUtils.get_current_time_info()
 NOWINSYDNEY: str = time_info['NOWINSYDNEY']
@@ -1319,7 +1290,6 @@ browser1 = 'APPBROWSER_TIMEAGO'
 httplogs1 = 'HTTPLogs_TIMEAGO'
 httplogs2 = 'HTTPLogs_TIMEBETWEEN'
 ipsec1 = 'APPSERVIPSec_TIMEAGO'
-
 
 
 def main() -> None:
@@ -1369,7 +1339,7 @@ def main() -> None:
         Path(TOKEN_FILEPATH_STR).unlink(missing_ok=True)
 
     FileHandler.remove_files_from_folder(folder=OUTPUT_FOLDER, file_extension=DELALL_FEXT)
-    cS.S()
+    LF()
     if Path(AZDIAG_JSON_FILEPATH_STR).is_file():
         query_name_for_local = UserInputHandler.select_query()
         DataProcessor.process_data(AZDIAG_JSON_FILEPATH_STR, AZDIAG_CSV_FILEPATH_STR, AZDIAG_EXTRACTIONLOGS_FILEPATH_STR, AZDIAG_EXCEL_FILEPATH, AZDIAG_EXCEL_FINAL_FILEPATH,
@@ -1388,7 +1358,7 @@ def main() -> None:
         else:
             logger.error('Failed to process API data.')
 
-    cS.S()
+    LF()
     COMPARE_HEADER_FILE = 'AZLOGS/COMPARE_HEADER.xlsx'
     compare_and_write_output(AZDIAG_CSV_FILEPATH_STR, AZDIAG_EXCEL_FINAL_FILEPATH, COMPARE_HEADER_FILE)
 

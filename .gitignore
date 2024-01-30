@@ -16,3 +16,4 @@ config/IPs.yaml
 sample.md
 frMOD.py
 matcher.py
+.aider*
