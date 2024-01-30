@@ -19,6 +19,8 @@ import yaml
 import httpx
 from convertTime import convert_utc_to_sydney
 from configurator import excelConfigurator, regexConfigurator, load_kql_queries, setup_logging, load_config_from_file, jprint, console
+from headerComparer import compare_and_write_output
+# from frMOD import FileHeaderReader
 
 OUTPUT_FOLDER: str = 'AZLOGS'
 LOG_FOLDER: str = f'{OUTPUT_FOLDER}/LOG'
@@ -51,6 +53,7 @@ class ConfigLoader():
 
 
 class ExcelConfigurations(TypedDict):
+    """The class `ExcelConfigurations` is a TypedDict that defines the structure of a configuration object for Excel files."""
     CL_INIT_ORDER: List[str]
     CL_DROPPED: List[str]
     CL_FINAL_ORDER: List[str]
@@ -58,12 +61,14 @@ class ExcelConfigurations(TypedDict):
 
 
 class RegexConfigurations(TypedDict):
+    """The class `RegexConfigurations` is a TypedDict that defines the structure of a configuration object for Excel files."""
     AZDIAG_PATTS: List[str]
     AZDIAG_STRINGS: List[str]
     MATCH_VALUE_TO_SPECIFIC_COLUMN: Dict[str, List[str]]
 
 
 class AppConfigurations(TypedDict):
+    """The AppConfigurations class defines a dictionary type with specific keys and corresponding value types for storing application configurations."""
     TENANT_ID: str
     CLIENT_ID: str
     CLIENT_SECRET: str
@@ -78,61 +83,6 @@ class AppConfigurations(TypedDict):
     AZDIAG_EXTRACTIONLOGS_FILEPATH_STR: str
     TOKEN_URL: str
     AZLOG_ZEN_ENDPOINT: str
-
-
-class DataFrameUtilities():
-
-    @staticmethod
-    def find_duplicate_columns(df) -> Any:
-        """The function `find_duplicate_columns` takes a DataFrame as input and returns a list of duplicate
-        column names."""
-        duplicate_columns = df.columns[df.columns.duplicated()]
-        logger.info(f"Duplicate columns: {duplicate_columns.tolist()}")
-        return duplicate_columns.tolist()
-
-
-class TimeUtils():
-
-    @staticmethod
-    def get_current_time_info() -> dict[str, Any]:
-        """The function `get_current_time_info` returns a dictionary containing the current time information in
-        Sydney and in UTC."""
-        utc_zone = pytz.utc
-        sydney_zone = pytz.timezone('Australia/Sydney')
-        utc_now = datetime.now(utc_zone)
-        sydney_now = utc_now.astimezone(sydney_zone)
-        return {
-            'NOWINSYDNEY': sydney_now.strftime('%d-%m-%y %H:%M:%S'),
-            'NOWINAZURE': utc_now,
-            'TODAY': sydney_now.strftime('%d-%m-%y'),
-            'NOWINSYDNEY_FILEFORMAT': sydney_now.strftime("%Y-%m-%d_%H-%M-%S"),
-            'NOWINAZURE_FILEFORMAT': utc_now.strftime("%Y-%m-%d_%H-%M-%S")
-        }
-
-    @staticmethod
-    def is_date_string(s, date_format) -> bool:  # for backups
-        """Check if the string s matches the date_format."""
-        try:
-            datetime.strptime(s, date_format)
-            return True
-        except ValueError:
-            return False
-
-    @staticmethod
-    def validate_time_format_AZURE(time_str) -> bool:
-        """Validate if the input string matches Azure's expected date-time formats."""
-        try:
-            # Attempt to parse the datetime string
-            parsed_time = parser.parse(time_str)
-            logger.info(f"Validated and parsed time: {parsed_time.isoformat()}")
-            return True
-        except ValueError:
-            return False
-
-    @staticmethod
-    def validate_time_format(time_str) -> bool:
-        """Validates if the time string includes a time unit (m, h, d, w). Returns True if valid, False otherwise."""
-        return bool(re.match(r'^\d+[mhdw]$', time_str))
 
 
 class APIManager():
@@ -185,12 +135,6 @@ class APIManager():
             logger.error(f"An error occurred: {str(object=e)}")
         return None, None
 
-    # @staticmethod
-    # def is_token_valid(token_info) -> bool:
-    #     current_time = int(time.time())
-    #     expires_on = int(token_info['expires_on'])
-    #     return current_time < expires_on
-
     @staticmethod
     def fetch_and_save_api_data(
         token_url: str = '',
@@ -200,27 +144,26 @@ class APIManager():
         token_file_path: str = '',
         json_file_path: str = '',
         endpoint: str = ''
-    ) -> tuple[Literal['Error in token'], Any | Literal['AZDIAG_IP1IP2TIMEAGO', 'AZDIAG_TIMEAGO', 'AZDIAG_TIMEBETWEEN', 'APPREQ_TIMEAGO', 'APPPAGE_TIMEAGO', 'APPBROWSER_TIMEAGO',
-                                                        'APPSERVHTTPLogs_TIMEAGO', 'APPSERVIPSecTIMEAGO']] | tuple[Any | dict[
-                                                            Any, Any], Any | Literal['AZDIAG_IP1IP2TIMEAGO', 'AZDIAG_TIMEAGO', 'AZDIAG_TIMEBETWEEN', 'APPREQ_TIMEAGO',
-                                                                                     'APPPAGE_TIMEAGO', 'APPBROWSER_TIMEAGO', 'APPSERVHTTPLogs_TIMEAGO', 'APPSERVIPSecTIMEAGO']]:
+    ) -> tuple[Literal['Error in token'],
+               Literal['AZDIAG_IP1IP2_TIMEAGO', 'AZDIAG_TIMEAGO', 'HTTPLogs_TIMEAGO', 'AZDIAG_IP_TIMEBETWEEN', 'AZDIAG_TIMEBETWEEN', 'HTTPLogs_TIMEBETWEEN']] | tuple[Any | dict[
+                   Any, Any], Literal['AZDIAG_IP1IP2_TIMEAGO', 'AZDIAG_TIMEAGO', 'HTTPLogs_TIMEAGO', 'AZDIAG_IP_TIMEBETWEEN', 'AZDIAG_TIMEBETWEEN', 'HTTPLogs_TIMEBETWEEN']]:
         """The function fetches and saves API data using a token and query, and handles errors."""
         query_name, query_content = UserInputHandler.get_query_input()
         KQL = json.dumps({"query": query_content})
-        logger.info(f'\nActive [yellow]Query Name:[/yellow] [red]{query_name}[/red]\n')
-        S.lf()
+        logger.info(f'Active [yellow]Query Name:[/yellow] [red]{query_name}[/red]')
+        cS.lf()
         # logger.warning('\nActive [yellow]Query([red]JSON[/red]):[/yellow]')
         # Shotcuts.CRLF()
         # jprint(KQL)
         # Shotcuts.CRLF()
-        console.print('Active Query([red] Formatted [/red]):', style="blue blink", justify="center")
-        S.lf()
+        console.print('([red]Formatted[/red] Query):', style="blue blink", justify="left")
+        cS.lf()
         console.print(query_content, style="white", justify="left")
-        S.lf()
-        console.print('IS THE QUERY CORRECT?', style="green bold", justify="center")
-        S.lf()
+        cS.lf()
+        console.print('IS THE QUERY CORRECT?', style="green bold", justify="left")
+        cS.lf()
         correct_query = input(f'Query name: {query_name} Enter to continue, or type anything to exit...')
-        S.lf()
+        cS.lf()
         if correct_query == '':
             logger.info(f'Proceed with: {query_name}')
         else:
@@ -310,7 +253,7 @@ class FileHandler():
                 for table in json_data['tables']:
                     logger.debug(f"Table name: {table['name']}")
                     df = pd.DataFrame(table['rows'], columns=[col['name'] for col in table['columns']])
-                    DataFrameUtilities.find_duplicate_columns(df)
+                    DataFrameManipulator.find_duplicate_columns(df)
                     dataframe_row_length = len(df)
                     dataframe_column_length = len(df.columns)
                     logger.info(f'DataFrame Rows: {dataframe_row_length} - DataFrame Columns: {dataframe_column_length}')
@@ -325,7 +268,7 @@ class FileHandler():
                     original_list_of_columns = df.columns.tolist()
                     original_list_of_columns_count = len(original_list_of_columns)
                     df.dropna(axis=1, how='all', inplace=True)
-                    DataFrameUtilities.find_duplicate_columns(df)
+                    DataFrameManipulator.find_duplicate_columns(df)
                     logger.info(f'Original col count {original_list_of_columns_count} - After dropna col count {len(df.columns.tolist())}')
                     logger.debug(f'Dropped: {len(original_list_of_columns) - len(df.columns.tolist())} columns')
                     after_drop_list_of_columns = df.columns.tolist()
@@ -342,11 +285,13 @@ class FileHandler():
                         # yapf: enable
                         droppped_columns_count = len([col for col in original_list_of_columns if col not in after_drop_list_of_columns])
                         if dropped_columns:
-                            logger.debug(f'Dropped columns:\n {dropped_columns} | Count: {droppped_columns_count}')
+                            logger.debug(f'Count: {droppped_columns_count}')
+                            cS.lf()
+                            logger.debug(f'Dropped columns:{dropped_columns}')
                         else:
                             logger.info('No cols dropped')
                     df.to_csv(filename, index=False, encoding='utf-8')
-                    DataFrameUtilities.find_duplicate_columns(df)
+                    DataFrameManipulator.find_duplicate_columns(df)
                     return True
             else:
                 logger.warning("No tables found in response.")
@@ -361,7 +306,7 @@ class FileHandler():
         specified source column, drops specified columns, reorders the columns based on an initial order,
         checks for duplicate columns, and saves the modified DataFrame to a new CSV file."""
         try:
-            df = pd.read_csv(input_file)
+            df = pd.read_csv(input_file, low_memory=False)
             logger.info(f"source_col: {source_col} | dest_col: {dest_col}")
 
             new_column_data = df[source_col].apply(convert_utc_to_sydney)
@@ -381,11 +326,11 @@ class FileHandler():
             new_order += rest_columns
 
             # ! Optional, for debugging
-            if duplicate_cols := DataFrameUtilities.find_duplicate_columns(df[new_order]):  # ? NOTE
+            if duplicate_cols := DataFrameManipulator.find_duplicate_columns(df[new_order]):  # ? NOTE
                 logger.info(f"Duplicate columns before reordering: {duplicate_cols}")
             else:
                 logger.info("No duplicate columns before reordering.")
-            # duplicate_cols = DataFrameUtilities.find_duplicate_columns(df[new_order])
+            # duplicate_cols = DataFrameManipulator.find_duplicate_columns(df[new_order])
             # if duplicate_cols:
             #     logger.info(f"Duplicate columns after reordering: {duplicate_cols}")
             # else:
@@ -502,6 +447,14 @@ class DataFrameManipulator():
             return df
 
     @staticmethod
+    def find_duplicate_columns(df) -> Any:
+        """The function `find_duplicate_columns` takes a DataFrame as input and returns a list of duplicate
+        column names."""
+        duplicate_columns = df.columns[df.columns.duplicated()]
+        logger.info(f"Duplicate columns: {duplicate_columns.tolist()}")
+        return duplicate_columns.tolist()
+
+    @staticmethod
     def remove_patterns(dataframe, extraction_file, regex, string, key_col_to_val_patts) -> Any:
         """The `remove_patterns` function takes a dataframe, extraction file, regex patterns, string patterns,
         and key-value patterns as input, removes the specified patterns from the dataframe, and returns the
@@ -597,7 +550,7 @@ class ExcelManager():
     def excelCreate(input_csv_file, output_excel_file, extraction_log_file, regex_patterns, string_patterns, col_to_val_patterns) -> None:
         """The function `excelCreate` reads a CSV file, removes specified patterns from the data, drops columns with all NaN values, and creates an Excel file with the formatted data."""
         try:
-            df = pd.read_csv(input_csv_file)
+            df = pd.read_csv(input_csv_file, low_memory=False)
             df = DataFrameManipulator.remove_patterns(dataframe=df,
                                                       extraction_file=extraction_log_file,
                                                       regex=regex_patterns,
@@ -856,7 +809,10 @@ class BackupManager():
         moved_files = []
         AZDIAG_CSV_FILEPATH_STR = 'AzDiag.csv'
         if AZDIAG_CSV_FILEPATH_STR in files:
-            df = pd.read_csv(os.path.join(input_dir, AZDIAG_CSV_FILEPATH_STR))
+            csv_file_path = os.path.join(input_dir, AZDIAG_CSV_FILEPATH_STR)
+            df = pd.read_csv(csv_file_path, low_memory=False)
+            # df = pd.read_csv(os.path.join(input_dir, AZDIAG_CSV_FILEPATH_STR))
+
             logger.info(f'First LocalTime found: {df["LocalTime"].iloc[0]}')
             df['LocalTime'] = pd.to_datetime(df['LocalTime'], format='%d-%m-%y %H:%M:%S', errors='coerce')
             first_timestamp = df['LocalTime'].iloc[0].strftime('%d-%m-%y_%I.%M%p')
@@ -1021,51 +977,119 @@ class DataProcessor():
             logger.error(f'E in process_local_data: {e}', exc_info=True, stack_info=True, extra={'color': 'red'}, stacklevel=2)
 
 
+class TimeUtils():
+
+    @staticmethod
+    def get_current_time_info() -> dict[str, Any]:
+        """The function `get_current_time_info` returns a dictionary containing the current time information in
+        Sydney and in UTC."""
+        utc_zone = pytz.utc
+        sydney_zone = pytz.timezone('Australia/Sydney')
+        utc_now = datetime.now(utc_zone)
+        sydney_now = utc_now.astimezone(sydney_zone)
+        return {
+            'NOWINSYDNEY': sydney_now.strftime('%d-%m-%y %H:%M:%S'),
+            'NOWINAZURE': utc_now,
+            'TODAY': sydney_now.strftime('%d-%m-%y'),
+            'NOWINSYDNEY_FILEFORMAT': sydney_now.strftime("%Y-%m-%d_%H-%M-%S"),
+            'NOWINAZURE_FILEFORMAT': utc_now.strftime("%Y-%m-%d_%H-%M-%S")
+        }
+
+    @staticmethod
+    def is_date_string(string, date_format) -> bool:  # for backups
+        """Check if the string s matches the date_format."""
+        try:
+            datetime.strptime(string, date_format)
+            return True
+        except ValueError:
+            return False
+
+    @staticmethod
+    def convert_syd_to_aztime(time_str):
+        """Converts a Sydney time string to an Azure time string."""
+        sydney_zone = pytz.timezone('Australia/Sydney')
+        utc_zone = pytz.utc
+        sydney_now = datetime.strptime(time_str, '%d-%m-%y %H:%M:%S')
+        sydney_now = sydney_zone.localize(sydney_now)
+        utc_now = sydney_now.astimezone(utc_zone)
+        return utc_now.strftime('%Y-%m-%d %H:%M:%S.%fz')
+
+    @staticmethod
+    def validate_starttime_endtime(time_str) -> bool:
+        """Validate if the input string matches Azure's expected date-time formats."""
+        try:
+            # Attempt to parse the datetime string
+            logger.info(f'Received time string: {time_str}\n Parsing...\n')
+            az = TimeUtils.convert_syd_to_aztime(time_str)
+            logger.info(f'Converted time: {az}')
+            return True
+        except ValueError:
+            return False
+
+    @staticmethod
+    def validate_timeago_variable(time_str) -> bool:
+        """Validates if the time string includes a time unit (m, h, d, w). Returns True if valid, False otherwise."""
+        return bool(re.match(r'^\d+[mhdw]$', time_str))
+
+
 class UserInputHandler():
 
     @staticmethod
-    def select_query(
-    ) -> Any | Literal['AZDIAG_IP1IP2TIMEAGO', 'AZDIAG_TIMEAGO', 'APPREQ_TIMEAGO', 'APPPAGE_TIMEAGO', 'APPBROWSER_TIMEAGO', 'APPSERVHTTPLogs_TIMEAGO', 'APPSERVIPSecTIMEAGO']:
-        """Selects a query from a list of options and returns the chosen query."""
+    def list_choices() -> None:
         console.print('[red]Select query[/red]', style='bold', justify='center', markup=True)
-        S.lf()
+        cS.lf()
         console.print('[yellow]#' * 30 + 'AzureDiagnostics' + '#[/yellow]' * 30, style='bold', justify='center', markup=True)
-        console.print('1. [blue]AZDIAG IP1IP2TIMEAGO[/blue]', style='italic', justify='center', markup=True)
-        console.print('2. [blue]AZDIAG TIMEBETWEEN[/blue]', style='blink', justify='center', markup=True)
-        console.print('3. [blue]AZDIAG SINGLEIPTIMEBETWEEN[/blue]', style='blink', justify='center', markup=True)
-        console.print('4. [blue]AZDIAG TIMEAGO[/blue]', style='blink', justify='center', markup=True)
+        console.print('1. [blue]AZDIAG_IP1IP2_TIMEAGO[/blue]', style='italic', justify='center', markup=True)
+        console.print('2. [blue]AZDIAG_TIMEBETWEEN[/blue]', style='blink', justify='center', markup=True)
+        console.print('3. [blue]AZDIAG_IP_TIMEBETWEEN[/blue]', style='blink', justify='center', markup=True)
+        console.print('4. [blue]AZDIAG_TIMEAGO[/blue]', style='blink', justify='center', markup=True)
+        cS.lf()
         console.print('[yellow]#' * 30 + 'AppRequests' + '#[/yellow]' * 30, style='bold', justify='center', markup=True)
-        console.print('5. [blue]APPREQ TIMEAGO[/blue]', style='blink', justify='center', markup=True)
+        console.print('5. [blue]APPREQ_TIMEAGO - not yet[/blue]', style='blink', justify='center', markup=True)
+        cS.lf()
         console.print('[yellow]#' * 30 + 'AppPages' + '#[/yellow]' * 30, style='bold', justify='center', markup=True)
-        console.print('6. [blue]APPPAGE TIMEAGO[/blue]', style='blink', justify='center', markup=True)
+        console.print('6. [blue]APPPAGE_TIMEAGO - not yet[/blue]', style='blink', justify='center', markup=True)
+        cS.lf()
         console.print('[yellow]#' * 30 + 'AppBrowser' + '#[/yellow]' * 30, style='bold', justify='center', markup=True)
-        console.print('7. [blue]APPBROWSER TIMEAGO[/blue]', style='blink', justify='center', markup=True)
+        console.print('7. [blue]APPBROWSER_TIMEAGO - not yet[/blue]', style='blink', justify='center', markup=True)
+        cS.lf()
         console.print('[yellow]#' * 30 + 'AppServiceHTTPLogs' + '#[/yellow]' * 30, style='bold', justify='center', markup=True)
-        console.print('8. [blue]APPSERVHTTPLogs TIMEAGO[/blue]', style='blink', justify='center', markup=True)
+        console.print('8. [blue]HTTPLogs_TIMEAGO[/blue]', style='blink', justify='center', markup=True)
+        console.print('9. [blue]HTTPLogs_TIMEBETWEEN[/blue]', style='blink', justify='center', markup=True)
+        cS.lf()
         console.print('[yellow]#' * 30 + 'AppServiceIPSec' + '#[/yellow]' * 30, style='bold', justify='center', markup=True)
-        console.print('9. [blue]APPSERVIPSec TIMEAGO[/blue]', style='blink', justify='center', markup=True)
+        console.print('10. [blue]APPSERVIPSec_TIMEAGO - not yet[/blue]', style='blink', justify='center', markup=True)
         console.print('0. [magenta]Exit[/magenta]', style='blink', justify='center', markup=True)
+
+    @staticmethod
+    def select_query():
+        """Selects a query from a list of options and returns the chosen query."""
+        UserInputHandler.list_choices()
         query = input('Select query: ')
+        query = query.strip()
         if query == '1':
-            return azdiag1
+            return 'AZDIAG_IP1IP2_TIMEAGO'
         elif query == '2':
-            return azdiag2
+            return 'AZDIAG_TIMEBETWEEN'
         elif query == '3':
-            return azdiag3
+            return 'AZDIAG_IP_TIMEBETWEEN'
         elif query == '4':
-            return azdiag4
+            return 'AZDIAG_TIMEAGO'
         elif query == '5':
-            return req1
+            return 'APPREQ_TIMEAGO'
         elif query == '6':
-            return page1
+            return 'APPPAGE_TIMEAGO'
         elif query == '7':
-            return browser1
+            return 'APPBROWSER_TIMEAGO'
         elif query == '8':
-            return httplogs1
+            return 'HTTPLogs_TIMEAGO'
         elif query == '9':
-            return a7
+            return 'HTTPLogs_TIMEBETWEEN'
+        elif query == '10':
+            return 'APPSERVIPSec_TIMEAGO'
         elif query == '0':
             sys.exit()
+        logger.info(f'Query selected: {query}')
         logger.info('Wrong query, try again')
         return UserInputHandler.select_query()
 
@@ -1074,53 +1098,102 @@ class UserInputHandler():
         """Prompt the user for a datetime input and validate or adjust it to a proper format."""
         while True:
             input_time = input(prompt)
-            if TimeUtils.validate_time_format_AZURE(input_time):
-                return parser.parse(input_time).isoformat()
-            else:
-                logger.info("Invalid format. Please use '2024-01-28T17:57:38Z' or '2024-01-28 17:55:38.994534+00:00' or '2024-01-28T17:57:35.703683Z'.")
+            logger.info(f'User entered: {input_time}')
+            if re.match(r'^\d{2}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$', input_time):
+                return input_time
+            logger.info("Format must be: 30-01-24 18:42:11")
 
     @staticmethod
-    def get_query_input() -> tuple[
-        Any | Literal[
-            'AZDIAG_IP1IP2TIMEAGO',
-            'AZDIAG_TIMEBETWEEN',
-            'AZDIAG_SINGLEIPTIMEBETWEEN',
-            'AZDIAG_TIMEAGO',
-            'APPREQ_TIMEAGO',
-            'APPPAGE_TIMEAGO',
-            'APPBROWSER_TIMEAGO',  # ! Here
-            'APPSERVHTTPLogs_TIMEAGO',
-            'APPSERVIPSecTIMEAGO'],
-        str]:  # ? 1
+    def get_query_input():  # ? 1
         """Get user input for selecting and formatting a query.
         Returns:tuple: A tuple containing the selected query name and the formatted query content."""
         query_choice = UserInputHandler.select_query()
         query_name = query_choice
         ip1 = ip2 = None
-        if query_name == "AZDIAG_IP1IP2TIMEAGO":
+
+        if query_name == "AZDIAG_IP1IP2_TIMEAGO":
+            logger.info('AZDIAG_IP1IP2_TIMEAGO')
             ip1 = input('Enter value for IP1: ')
             ip2 = input('Enter value for IP2: ')
-            timeago = input('Enter value for TIMEAGO (e.g., 10m, 2h, 1d): ')
-            while not TimeUtils.validate_time_format(timeago):
+            timeago = input('IP1IP2: Enter value for TIMEAGO (e.g., 10m, 2h, 1d): ')
+            while not TimeUtils.validate_timeago_variable(timeago):
                 logger.info('Invalid format. Please include (m)inutes, (h)ours, (d)ays, or (w)eeks. E.g., "10m" for 10 minutes.')
                 timeago = input('Enter value for TIMEAGO (e.g., 10m, 2h, 1d): ')
-            query_content = QueryFormatter.format_query(query_name, ip1=ip1, ip2=ip2, timeago=timeago)
+            query_content = QueryFormatter.format_query(query_name, ip1=ip1, ip2=ip2, timeago=timeago, whitelist=WHITELIST_IPs)
+
+        elif query_name == "AZDIAG_TIMEAGO":
+            logger.info('AZDIAG_TIMEAGO')
+            timeago = input('IP1IP2: Enter value for TIMEAGO (e.g., 10m, 2h, 1d): ')
+            while not TimeUtils.validate_timeago_variable(timeago):
+                logger.info('Invalid format. Please include (m)inutes, (h)ours, (d)ays, or (w)eeks. E.g., "10m" for 10 minutes.')
+                timeago = input('Enter value for TIMEAGO (e.g., 10m, 2h, 1d): ')
+            query_content = QueryFormatter.format_query(query_name, timeago=timeago, whitelist=WHITELIST_IPs)
+
+        elif query_name == "HTTPLogs_TIMEAGO":
+            logger.info('HTTPLogs_TIMEAGO')
+            timeago = input('IP1IP2: Enter value for TIMEAGO (e.g., 10m, 2h, 1d): ')
+            while not TimeUtils.validate_timeago_variable(timeago):
+                logger.info('Invalid format. Please include (m)inutes, (h)ours, (d)ays, or (w)eeks. E.g., "10m" for 10 minutes.')
+                timeago = input('Enter value for TIMEAGO (e.g., 10m, 2h, 1d): ')
+            query_content = QueryFormatter.format_query(query_name, timeago=timeago, whitelist=WHITELIST_IPs)
+
+        elif query_name == "AZDIAG_IP_TIMEBETWEEN":
+            logger.info('AZDIAG_IP_TIMEBETWEEN')
+            single_ip = input('Enter value for IP1: ')
+            while True:
+                logger.info(f'NOWINSYDNEY: {NOWINSYDNEY}')
+                logger.info('Enter Sydney time, will convert to az')
+                STARTTIME = UserInputHandler.input_datetime_with_validation('Start time(Enter sydney time: Format must be: 30-01-24 18:42:11 ')
+                if TimeUtils.validate_starttime_endtime(STARTTIME):
+                    STARTTIME = TimeUtils.convert_syd_to_aztime(STARTTIME)
+                    logger.info(f'Converted STARTTIME: {STARTTIME}')
+                    break
+                logger.info('Format must be: 30-01-24 18:42:11')
+            while True:
+                ENDTIME = UserInputHandler.input_datetime_with_validation('End time(Example Format: 30-01-24 18:42:11')
+                if TimeUtils.validate_starttime_endtime(ENDTIME):
+                    ENDTIME = TimeUtils.convert_syd_to_aztime(ENDTIME)
+                    logger.info(f'Converted STARTTIME: {ENDTIME}')
+                    break
+                logger.info('Format: 30-01-24 18:42:11')
+            query_content = QueryFormatter.format_query(query_name, start_t=STARTTIME, end_t=ENDTIME, singleip=single_ip, whitelist=WHITELIST_IPs)
+
         elif query_name == "AZDIAG_TIMEBETWEEN":
-            STARTTIME = UserInputHandler.input_datetime_with_validation('Start time(Example fmt 2024-01-28T17:57:38Z): ')
-            ENDTIME = UserInputHandler.input_datetime_with_validation('End time(Example fmt 2024-01-28T17:57:38Z: ')
+            logger.info('AZDIAG_TIMEBETWEEN')
+            while True:
+                STARTTIME = UserInputHandler.input_datetime_with_validation('Start time(Example fmt 2024-01-28T17:57:38Z): ')
+                if TimeUtils.validate_starttime_endtime(STARTTIME):
+                    break
+                logger.info('Format must be: 30-01-24 18:42:11')
+            while True:
+                ENDTIME = UserInputHandler.input_datetime_with_validation('End time(Example fmt 2024-01-28T17:57:38Z: ')
+                if TimeUtils.validate_starttime_endtime(ENDTIME):
+                    break
+                logger.info('Format must be: 30-01-24 18:42:11')
             query_content = QueryFormatter.format_query(query_name, start_t=STARTTIME, end_t=ENDTIME, whitelist=WHITELIST_IPs)
-        elif query_name == "AZDIAG_SINGLEIPTIMEBETWEEN":
-            STARTTIME = UserInputHandler.input_datetime_with_validation('Start time(Example fmt 2024-01-28T17:57:38Z): ')
-            ENDTIME = UserInputHandler.input_datetime_with_validation('End time(Example fmt 2024-01-28T17:57:38Z: ')
-            single_ip = UserInputHandler.input_datetime_with_validation('IP: ')
-            query_content = QueryFormatter.format_query(query_name, start_t=STARTTIME, end_t=ENDTIME, singleip=single_ip)
+
+        elif query_name == "HTTPLogs_TIMEBETWEEN":
+            logger.info('HTTPLogs_TIMEBETWEEN')
+            while True:
+                STARTTIME = UserInputHandler.input_datetime_with_validation('Start time(Example fmt 2024-01-28T17:57:38Z): ')
+                if TimeUtils.validate_starttime_endtime(STARTTIME):
+                    break
+                logger.info('Format must be: 30-01-24 18:42:11')
+            while True:
+                ENDTIME = UserInputHandler.input_datetime_with_validation('End time(Example fmt 2024-01-28T17:57:38Z: ')
+                if TimeUtils.validate_starttime_endtime(ENDTIME):
+                    break
+                logger.info('Format must be: 30-01-24 18:42:11')
+            query_content = QueryFormatter.format_query(query_name, start_t=STARTTIME, end_t=ENDTIME, whitelist=WHITELIST_IPs)
 
         else:
-            timeago = input('Enter value for TIMEAGO (e.g., 10m, 2h, 1d): ')
-            while not TimeUtils.validate_time_format(timeago):
+            logger.info('Else: section ')
+            timeago = input('Else: Enter value for TIMEAGO (e.g., 10m, 2h, 1d): ')
+            while not TimeUtils.validate_timeago_variable(timeago):
                 logger.info('Invalid format. Please include (m)inutes, (h)ours, (d)ays, or (w)eeks. E.g., "10m" for 10 minutes.')
                 timeago = input('Enter value for TIMEAGO (e.g., 10m, 2h, 1d): ')
             query_content = QueryFormatter.format_query(query_name, timeago=timeago)
+            sys.exit()
         return query_name, query_content
 
 
@@ -1140,24 +1213,26 @@ class QueryFormatter():
         Returns:
         - str: The formatted query."""
         query_param_map = {
-            "AZDIAG_IP1IP2TIMEAGO": {
+            "AZDIAG_IP1IP2_TIMEAGO": {
                 "IP1": ip1,
                 "IP2": ip2,
-                "TIME": timeago
+                "TIME": timeago,
+                "WHITE": WHITELIST_IPs,
             },
             "AZDIAG_TIMEBETWEEN": {
                 "STARTTIME": start_t,
                 "ENDTIME": end_t,
                 "WHITE": WHITELIST_IPs,
             },
-            "AZDIAG_SINGLEIPTIMEBETWEEN": {
+            "AZDIAG_IP_TIMEBETWEEN": {
                 "STARTTIME": start_t,
                 "ENDTIME": end_t,
+                "SINGLEIP": singleip,
                 "WHITE": WHITELIST_IPs,
-                "SINGLEIP": singleip
             },
             "AZDIAG_TIMEAGO": {
-                "TIME": timeago
+                "TIME": timeago,
+                "WHITE": WHITELIST_IPs
             },
             "APPREQ_TIMEAGO": {
                 "TIME": timeago
@@ -1168,31 +1243,35 @@ class QueryFormatter():
             "APPBROWSER_TIMEAGO": {
                 "TIME": timeago
             },
-            "APPSERVHTTPLogs_TIMEAGO": {
+            "HTTPLogs_TIMEAGO": {
                 "TIME": timeago
+            },
+            "HTTPLogs_TIMEBETWEEN": {
+                "STARTTIME": start_t,
+                "ENDTIME": end_t
             },
             "APPSERVIPSecTIMEAGO": {
                 "TIME": timeago
             },
         }
 
-        formatted_query_name = f"RAW_{query_name}"
+        formatted_query_name = f"KQL_{query_name}"
         if formatted_query_name in raw_kql_queries:
             query_template = raw_kql_queries[formatted_query_name]
             query_params = query_param_map.get(query_name, {})
             return query_template.format(**query_params)
-        logger.error(f'Active [yellow]Query Name:[/yellow] [red]{query_name}[/red] not found')
+        logger.error(f'Active [yellow]Query Name:[/yellow] [red]{query_name}[/red] not found\nExiting...', exc_info=True, stack_info=True, extra={'markup': True})
         return 'Not Found'
 
 
-class S():  # ! Shotcuts
+class cS():  # ! Shotcuts
 
     @staticmethod
     def lf() -> None:  # ! CRLF - Linefeed
         console.print('\r\n')
 
     @staticmethod
-    def s(t: float = 0.5) -> None:
+    def S(t: float = 0.5) -> None:
         sleep(t)
         console.print(f'Sleepy time Zzz{t}...')
 
@@ -1205,35 +1284,42 @@ TODAY: str = time_info['TODAY']
 NOWINSYDNEY_FILEFORMAT: str = time_info['NOWINSYDNEY_FILEFORMAT']
 NOWINAZURE_FILEFORMAT: str = time_info['NOWINAZURE_FILEFORMAT']
 logger.info(f'Sydney Time {NOWINSYDNEY}')
-logger.info(f'Sydney Time {NOWINAZURE}')
+logger.info(f'NOWINAZURE Time {NOWINAZURE}')
 raw_kql_queries = {
-    "RAW_AZDIAG_IP1IP2TIMEAGO": kql_queries["F_AzDiag_IP1IP2TIMEAGO"]["query"],
-    "RAW_AZDIAG_TIMEBETWEEN": kql_queries["F_AzDiag_TIMEBETWEEN"]["query"],
-    "RAW_AZDIAG_SINGLEIPTIMEBETWEEN": kql_queries["F_AzDiag_SINGLEIPTIMEBETWEEN"]["query"],
-    "RAW_AZDIAG_TIMEAGO": kql_queries["F_AzDiag_TIMEAGO"]["query"],
-    "RAW_APPREQ_TIMEAGO": kql_queries["F_AppReq_TIMEAGO"]["query"],
-    "RAW_APPPAGE_TIMEAGO": kql_queries["F_AppPage_TIMEAGO"]["query"],
-    "RAW_APPBROWSER_TIMEAGO": kql_queries["F_AppBrowser_TIMEAGO"]["query"],
-    "RAW_APPSERVHTTPLogs_TIMEAGO": kql_queries["F_AppServHTTPLogs_TIMEAGO"]["query"],
-    "RAW_APPSERVIPSecTIMEAGO": kql_queries["F_AppServIPSecTIMEAGO"]["query"],
+    "KQL_AZDIAG_IP1IP2_TIMEAGO": kql_queries["F_AzDiag_IP1IP2TIMEAGO"]["query"],
+    "KQL_AZDIAG_TIMEBETWEEN": kql_queries["F_AzDiag_TIMEBETWEEN"]["query"],
+    "KQL_AZDIAG_IP_TIMEBETWEEN": kql_queries["F_AzDiag_IP_TIMEBETWEEN"]["query"],
+    "KQL_AZDIAG_TIMEAGO": kql_queries["F_AzDiag_TIMEAGO"]["query"],
+    "KQL_APPREQ_TIMEAGO": kql_queries["F_AppReq_TIMEAGO"]["query"],
+    "KQL_APPPAGE_TIMEAGO": kql_queries["F_AppPage_TIMEAGO"]["query"],
+    "KQL_APPBROWSER_TIMEAGO": kql_queries["F_AppBrowser_TIMEAGO"]["query"],
+    "KQL_HTTPLogs_TIMEAGO": kql_queries["F_HTTPLogs_TIMEAGO"]["query"],
+    "KQL_HTTPLogs_TIMEBETWEEN": kql_queries["F_HTTPLogs_TIMEBETWEEN"]["query"],
+    "KQL_APPSERVIPSec_TIMEAGO": kql_queries["F_AppServIPSec_TIMEAGO"]["query"],
 }
 # # ? IPs
 IPs_FILEPATH: str = 'config/IPs.yaml'
 whitelist_data = FileHandler.read_yaml(IPs_FILEPATH)
-WHITELIST_IPs: List[str] = whitelist_data['WHITELIST']
-BLACKLIST_IPs: List[str] = whitelist_data['BLACKLIST']
+RAW_WHITELIST_IPs: List[str] = whitelist_data['WHITELIST']
+WHITELIST_IPs = ", ".join(f"'{ip}'" for ip in RAW_WHITELIST_IPs)
+
+RAW_BLACKLIST_IPs: List[str] = whitelist_data['BLACKLIST']
+BLACKLIST_IPs = ", ".join(f"'{ip}'" for ip in RAW_BLACKLIST_IPs)
+
 logger.info(f"WHITELIST: {WHITELIST_IPs}")
 logger.info(f"BLACKLIST: {BLACKLIST_IPs}")
 # ! OPTIONS
-azdiag1 = 'AZDIAG_IP1IP2TIMEAGO'
-azdiag2 = 'AZDIAG_TIMEAGO'
-azdiag3 = 'AZDIAG_SINGLEIPTIMEBETWEEN'
-azdiag4 = 'AZDIAG_TIMEBETWEEN'
+azdiag1 = 'AZDIAG_IP1IP2_TIMEAGO'
+azdiag2 = 'AZDIAG_TIMEBETWEEN'
+azdiag3 = 'AZDIAG_IP_TIMEBETWEEN'
+azdiag4 = 'AZDIAG_TIMEAGO'
 req1 = 'APPREQ_TIMEAGO'
 page1 = 'APPPAGE_TIMEAGO'
 browser1 = 'APPBROWSER_TIMEAGO'
-httplogs1 = 'APPSERVHTTPLogs_TIMEAGO'
-a7 = 'APPSERVIPSecTIMEAGO'
+httplogs1 = 'HTTPLogs_TIMEAGO'
+httplogs2 = 'HTTPLogs_TIMEBETWEEN'
+ipsec1 = 'APPSERVIPSec_TIMEAGO'
+
 
 
 def main() -> None:
@@ -1283,7 +1369,7 @@ def main() -> None:
         Path(TOKEN_FILEPATH_STR).unlink(missing_ok=True)
 
     FileHandler.remove_files_from_folder(folder=OUTPUT_FOLDER, file_extension=DELALL_FEXT)
-    S.s()
+    cS.S()
     if Path(AZDIAG_JSON_FILEPATH_STR).is_file():
         query_name_for_local = UserInputHandler.select_query()
         DataProcessor.process_data(AZDIAG_JSON_FILEPATH_STR, AZDIAG_CSV_FILEPATH_STR, AZDIAG_EXTRACTIONLOGS_FILEPATH_STR, AZDIAG_EXCEL_FILEPATH, AZDIAG_EXCEL_FINAL_FILEPATH,
@@ -1301,6 +1387,10 @@ def main() -> None:
             BackupManager.manage_backups(OUTPUT_FOLDER, query_name)
         else:
             logger.error('Failed to process API data.')
+
+    cS.S()
+    COMPARE_HEADER_FILE = 'AZLOGS/COMPARE_HEADER.xlsx'
+    compare_and_write_output(AZDIAG_CSV_FILEPATH_STR, AZDIAG_EXCEL_FINAL_FILEPATH, COMPARE_HEADER_FILE)
 
 
 if __name__ == '__main__':

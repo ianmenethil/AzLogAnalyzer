@@ -13,3 +13,6 @@ config/columns.yaml
 __pycache__/
 config/whitelist.yaml
 config/IPs.yaml
+sample.md
+frMOD.py
+matcher.py
