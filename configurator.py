@@ -2,6 +2,7 @@
 import os
 import json
 import logging
+from pathlib import Path
 from typing import Any, List, Dict, Tuple, Union, TypedDict, Optional  # pylint: disable=unused-import
 import functools  # pylint: disable=unused-import
 import inspect  # pylint: disable=unused-import
@@ -17,29 +18,14 @@ import re
 
 COLUMN_CONFIG_FILE = 'config/column_config.yaml'
 CONFIG_FILE = 'config/config.yaml'
-
-# def DEC_MOREDETAILS(func):
-
-#     @functools.wraps(func)
-#     def wrapper(*args, **kwargs):
-#         try:
-#             caller = inspect.stack()[1]
-#             console.print(f"[bold cyan]Function {func.__name__} was called from:[/bold cyan]")
-#             console.print(f"Filename: {caller.filename}")
-#             console.print(f"Function: {caller.function}")
-#             console.print(f"Line: {caller.lineno}")
-#             console.print("Event: function_call")
-#             result = func(*args, **kwargs)
-#             console.print(f"[bold green]Function {func.__name__} executed successfully.[/bold green]")
-#             return result
-#         except Exception as e:
-#             traceback = Traceback.from_exception(e, exc_value=e, traceback=traceback)
-#             console.print(traceback)
-
-#     return wrapper
+OUTPUT_FOLDER: str = 'AZLOGS'
+LOG_FOLDER: str = f'{OUTPUT_FOLDER}/LOG'
+if not Path(OUTPUT_FOLDER).is_dir():
+    Path(OUTPUT_FOLDER).mkdir()
+if not Path(LOG_FOLDER).is_dir():
+    Path(LOG_FOLDER).mkdir()
 
 
-# @DEC_MOREDETAILS
 def load_config_from_file() -> Any | dict:
     try:
         with open(CONFIG_FILE, 'r', encoding='utf-8') as file:
@@ -48,6 +34,10 @@ def load_config_from_file() -> Any | dict:
     except Exception as e:
         console.print(f"Error loading configuration: {e}")
         return {}
+
+
+def LF():
+    return print('\n')
 
 
 def set_env_variables() -> None:
@@ -75,14 +65,47 @@ def load_kql_queries() -> Dict[str, Dict[str, str]]:
     return kql_queries  # Return the loaded queries
 
 
+class ExcelConfigurations(TypedDict):
+    """The class `ExcelConfigurations` is a TypedDict that defines the structure of a configuration object for Excel files."""
+    CL_INIT_ORDER: List[str]
+    CL_DROPPED: List[str]
+    CL_FINAL_ORDER: List[str]
+    EXCLUSION_PAIRS: Dict[str, List[str]]
+
+
+class RegexConfigurations(TypedDict):
+    """The class `RegexConfigurations` is a TypedDict that defines the structure of a configuration object for Excel files."""
+    AZDIAG_PATTS: List[str]
+    AZDIAG_STRINGS: List[str]
+    MATCH_VALUE_TO_SPECIFIC_COLUMN: Dict[str, List[str]]
+
+
+class AppConfigurations(TypedDict):
+    """The AppConfigurations class defines a dictionary type with specific keys and corresponding value types for storing application configurations."""
+    TENANT_ID: str
+    CLIENT_ID: str
+    CLIENT_SECRET: str
+    ZEN_WORKSPACE_ID: str
+    AZDIAG_SCOPE: str
+    AZLOG_ENDPOINT: str
+    TOKEN_FILEPATH_STR: str
+    AZDIAG_JSON_FILEPATH_STR: str
+    AZDIAG_CSV_FILEPATH_STR: str
+    AZDIAG_EXCEL_FILEPATH: Path
+    AZDIAG_EXCEL_FINAL_FILEPATH: Path
+    Extraction_LogFILE: str
+    TOKEN_URL: str
+    AZLOG_ZEN_ENDPOINT: str
+
+
 class LowerCaseMessageLogRecord(logging.LogRecord):
 
     def getMessage(self):
         original = super().getMessage()
         words = original.split()
         capitalized_words = [
-            word.capitalize() if re.match(r'\bsaving\b', word, re.IGNORECASE) or re.match(r'\b(rows?|cols?)\b', word, re.IGNORECASE) or
-            re.match(r'\b(regexs?|strings?|columns?|cols?|rows?|patterns?|totals?|removals?)\b', word, re.IGNORECASE) else word for word in words
+            word.capitalize() if re.match(r'\bsaving\b', word, re.IGNORECASE) or re.match(r'\b(rows?|cols?)\b', word, re.IGNORECASE)
+            or re.match(r'\b(regexs?|strings?|columns?|cols?|rows?|patterns?|totals?|removals?)\b', word, re.IGNORECASE) else word for word in words
         ]
         return ' '.join(capitalized_words)
 

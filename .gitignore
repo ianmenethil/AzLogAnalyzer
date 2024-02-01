@@ -19,3 +19,5 @@ matcher.py
 .aider*
 api_manager.py
 /v3
+v4/
+1frMOD.py

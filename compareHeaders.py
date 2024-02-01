@@ -17,7 +17,7 @@ def compare_and_write_output(fp1, fp2, output_file) -> None:
             df = pd.read_excel(file_path_str)
             return list(df.columns)
         elif file_path_str.endswith('.json'):
-            with open(file_path_str, 'r') as file:
+            with open(file_path_str, 'r', encoding='utf-8') as file:
                 data = json.load(file)
                 if isinstance(data, list) and len(data) > 0:
                     return list(data[0].keys())
