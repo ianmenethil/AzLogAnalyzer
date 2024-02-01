@@ -130,17 +130,13 @@ class APIManager():
         return None, None
 
     @staticmethod
-    def fetch_and_save_api_data(
-        token_url: str = '',
-        client_id: str = '',
-        client_secret: str = '',
-        resource_scope: str = '',
-        token_file_path: str = '',
-        json_file_path: str = '',
-        endpoint: str = ''
-    ) -> tuple[Literal['Error in token'],
-               Literal['AZDIAG_IP1IP2_TIMEAGO', 'AZDIAG_TIMEAGO', 'HTTPLogs_TIMEAGO', 'AZDIAG_IP_TIMEBETWEEN', 'AZDIAG_TIMEBETWEEN', 'HTTPLogs_TIMEBETWEEN']] | tuple[Any | dict[
-                   Any, Any], Literal['AZDIAG_IP1IP2_TIMEAGO', 'AZDIAG_TIMEAGO', 'HTTPLogs_TIMEAGO', 'AZDIAG_IP_TIMEBETWEEN', 'AZDIAG_TIMEBETWEEN', 'HTTPLogs_TIMEBETWEEN']]:
+    def fetch_and_save_api_data(token_url: str = '',
+                                client_id: str = '',
+                                client_secret: str = '',
+                                resource_scope: str = '',
+                                token_file_path: str = '',
+                                json_file_path: str = '',
+                                endpoint: str = ''):
         """The function fetches and saves API data using a token and query, and handles errors."""
         query_name, query_content = UserInputHandler.get_query_input()
         KQL = json.dumps({"query": query_content})
@@ -917,10 +913,11 @@ class DataProcessor():
         try:
             json_data = FileHandler.read_json(filename=AZDIAG_JSON_FILEPATH_STR)
             if 'tables' in json_data:
+
                 saveData = FileHandler.DF_to_CSV_dropna(json_data=json_data,
-                                                               filename=AZDIAG_CSV_FILEPATH_STR,
-                                                               exclusion_pairs=EXCLUSION_PAIRS,
-                                                               log_file=AZDIAG_EXTRACTIONLOGS_FILEPATH_STR)
+                                                        filename=AZDIAG_CSV_FILEPATH_STR,
+                                                        exclusion_pairs=EXCLUSION_PAIRS,
+                                                        log_file=AZDIAG_EXTRACTIONLOGS_FILEPATH_STR)
                 if saveData:
                     logger.debug(f'CSV file created: {AZDIAG_CSV_FILEPATH_STR}')
                 else:
@@ -995,19 +992,20 @@ class TimeUtils():
         sydney_now = datetime.strptime(time_str, '%d-%m-%y %H:%M:%S')
         sydney_now = sydney_zone.localize(sydney_now)
         utc_now = sydney_now.astimezone(utc_zone)
-        return utc_now.strftime('%Y-%m-%d %H:%M:%S.%fz')
+        # return utc_now.strftime('%Y-%m-%d %H:%M:%S.%fz')
+        return utc_now.strftime('%Y-%m-%d %H:%M:%S.%f')[:-3] + 'Z'
 
     @staticmethod
-    def validate_starttime_endtime(time_str) -> bool:
+    def validate_starttime_endtime(time_str) -> str:
         """Validate if the input string matches Azure's expected date-time formats."""
         try:
             # Attempt to parse the datetime string
             logger.info(f'Received time string: {time_str}\n Parsing...\n')
             az = TimeUtils.convert_syd_to_aztime(time_str)
             logger.info(f'Converted time: {az}')
-            return True
-        except ValueError:
-            return False
+            return az
+        except ValueError as e:
+            return f'Error in az conversion {e}'
 
     @staticmethod
     def validate_timeago_variable(time_str) -> bool:
@@ -1083,8 +1081,12 @@ class UserInputHandler():
             input_time = input(prompt)
             logger.info(f'User entered: {input_time}')
             if re.match(r'^\d{2}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$', input_time):
-                return input_time
-            logger.info("Format must be: 30-01-24 18:42:11")
+                try:
+                    datetime.strptime(input_time, '%d-%m-%y %H:%M:%S')
+                    return input_time
+                except ValueError:
+                    logger.info("Invalid date or time.")
+            logger.info("Format must be: dd-mm-yy hh:mm:ss, e.g., 30-01-24 18:42:11")
 
     @staticmethod
     def get_query_input():  # ? 1
@@ -1098,7 +1100,7 @@ class UserInputHandler():
             logger.info('AZDIAG_IP1IP2_TIMEAGO')
             ip1 = input('Enter value for IP1: ')
             ip2 = input('Enter value for IP2: ')
-            timeago = input('IP1IP2: Enter value for TIMEAGO (e.g., 10m, 2h, 1d): ')
+            timeago = input('AZDIAG_IP1IP2_TIMEAGO: Enter value for TIMEAGO (e.g., 10m, 2h, 1d): ')
             while not TimeUtils.validate_timeago_variable(timeago):
                 logger.info('Invalid format. Please include (m)inutes, (h)ours, (d)ays, or (w)eeks. E.g., "10m" for 10 minutes.')
                 timeago = input('Enter value for TIMEAGO (e.g., 10m, 2h, 1d): ')
@@ -1106,7 +1108,7 @@ class UserInputHandler():
 
         elif query_name == "AZDIAG_TIMEAGO":
             logger.info('AZDIAG_TIMEAGO')
-            timeago = input('IP1IP2: Enter value for TIMEAGO (e.g., 10m, 2h, 1d): ')
+            timeago = input('AZDIAG_TIMEAGO: Enter value for TIMEAGO (e.g., 10m, 2h, 1d): ')
             while not TimeUtils.validate_timeago_variable(timeago):
                 logger.info('Invalid format. Please include (m)inutes, (h)ours, (d)ays, or (w)eeks. E.g., "10m" for 10 minutes.')
                 timeago = input('Enter value for TIMEAGO (e.g., 10m, 2h, 1d): ')
@@ -1114,7 +1116,7 @@ class UserInputHandler():
 
         elif query_name == "HTTPLogs_TIMEAGO":
             logger.info('HTTPLogs_TIMEAGO')
-            timeago = input('IP1IP2: Enter value for TIMEAGO (e.g., 10m, 2h, 1d): ')
+            timeago = input('HTTPLogs_TIMEAGO: Enter value for TIMEAGO (e.g., 10m, 2h, 1d): ')
             while not TimeUtils.validate_timeago_variable(timeago):
                 logger.info('Invalid format. Please include (m)inutes, (h)ours, (d)ays, or (w)eeks. E.g., "10m" for 10 minutes.')
                 timeago = input('Enter value for TIMEAGO (e.g., 10m, 2h, 1d): ')
@@ -1123,37 +1125,33 @@ class UserInputHandler():
         elif query_name == "AZDIAG_IP_TIMEBETWEEN":
             logger.info('AZDIAG_IP_TIMEBETWEEN')
             single_ip = input('Enter value for IP1: ')
-            while True:
-                logger.info(f'NOWINSYDNEY: {NOWINSYDNEY}')
-                logger.info('Enter Sydney time, will convert to az')
-                STARTTIME = UserInputHandler.input_datetime_with_validation(f'FORMAT{NOWINSYDNEY} Starttime: ')
-                if TimeUtils.validate_starttime_endtime(STARTTIME):
-                    STARTTIME = TimeUtils.convert_syd_to_aztime(STARTTIME)
-                    logger.info(f'Converted STARTTIME: {STARTTIME}')
-                    break
-                logger.info('Format must be: 30-01-24 18:42:11')
-            while True:
-                ENDTIME = UserInputHandler.input_datetime_with_validation(f'FORMAT{NOWINSYDNEY} | Endtime:')
-                if TimeUtils.validate_starttime_endtime(ENDTIME):
-                    ENDTIME = TimeUtils.convert_syd_to_aztime(ENDTIME)
-                    logger.info(f'Converted STARTTIME: {ENDTIME}')
-                    break
+            start_time = UserInputHandler.input_datetime_with_validation(f'AZDIAG_IP_TIMEBETWEEN - FORMAT{NOWINSYDNEY} Starttime: ')
+            while not start_time:
                 logger.info(f'Format must be: {NOWINSYDNEY}')
-            query_content = QueryFormatter.format_query(query_name, start_t=STARTTIME, end_t=ENDTIME, singleip=single_ip, whitelist=WHITELIST_IPs)
+                start_time = UserInputHandler.input_datetime_with_validation(f'AZDIAG_IP_TIMEBETWEEN - FORMAT{NOWINSYDNEY} Starttime: ')
+            end_time = UserInputHandler.input_datetime_with_validation(f'AZDIAG_IP_TIMEBETWEEN - FORMAT{NOWINSYDNEY} | Endtime:')
+            while not end_time:
+                logger.info(f'Format must be: {NOWINSYDNEY}')
+                end_time = UserInputHandler.input_datetime_with_validation(f'AZDIAG_IP_TIMEBETWEEN - FORMAT{NOWINSYDNEY} | Endtime:')
+            query_content = QueryFormatter.format_query(query_name, start_t=start_time, end_t=end_time, singleip=single_ip, whitelist=WHITELIST_IPs)
 
         elif query_name == "AZDIAG_TIMEBETWEEN":
             logger.info('AZDIAG_TIMEBETWEEN')
-            while True:
-                STARTTIME = UserInputHandler.input_datetime_with_validation(f'FORMAT{NOWINSYDNEY} Starttime: ')
-                if TimeUtils.validate_starttime_endtime(STARTTIME):
-                    break
+            start_time = UserInputHandler.input_datetime_with_validation(f'AZDIAG_TIMEBETWEEN - FORMAT{NOWINSYDNEY} Starttime: ')
+            while not start_time:
                 logger.info(f'Format must be: {NOWINSYDNEY}')
-            while True:
-                ENDTIME = UserInputHandler.input_datetime_with_validation(f'FORMAT{NOWINSYDNEY} | Endtime:')
-                if TimeUtils.validate_starttime_endtime(ENDTIME):
-                    break
+                start_time = UserInputHandler.input_datetime_with_validation(f'AZDIAG_TIMEBETWEEN - FORMAT{NOWINSYDNEY} Starttime: ')
+            start_time = TimeUtils.convert_syd_to_aztime(start_time)
+            logger.info(f'Converted start_time: {start_time}')
+
+            end_time = UserInputHandler.input_datetime_with_validation(f'AZDIAG_TIMEBETWEEN - FORMAT{NOWINSYDNEY} | Endtime:')
+            while not end_time:
                 logger.info(f'Format must be: {NOWINSYDNEY}')
-            query_content = QueryFormatter.format_query(query_name, start_t=STARTTIME, end_t=ENDTIME, whitelist=WHITELIST_IPs)
+                end_time = UserInputHandler.input_datetime_with_validation(f'AZDIAG_TIMEBETWEEN - FORMAT{NOWINSYDNEY} | Endtime:')
+            end_time = TimeUtils.convert_syd_to_aztime(end_time)
+            logger.info(f'Converted start_time: {end_time}')
+
+            query_content = QueryFormatter.format_query(query_name, start_t=start_time, end_t=end_time, whitelist=WHITELIST_IPs)
 
         elif query_name == "HTTPLogs_TIMEBETWEEN":
             logger.info('HTTPLogs_TIMEBETWEEN')
@@ -1171,6 +1169,7 @@ class UserInputHandler():
 
         else:
             console.print('Else: section ', style='bold', justify='center', markup=True)
+            sys.exit()
             timeago = input('Else: Enter value for TIMEAGO(10m) (2h) (1d): ')
             while not TimeUtils.validate_timeago_variable(timeago):
                 logger.info('Invalid format. Please include (m)inutes, (h)ours, (d)ays, or (w)eeks. E.g., "10m" for 10 minutes.')
@@ -1197,44 +1196,44 @@ class QueryFormatter():
         - str: The formatted query."""
         query_param_map = {
             "AZDIAG_IP1IP2_TIMEAGO": {
-                "IP1": ip1,
-                "IP2": ip2,
-                "TIME": timeago,
-                "WHITE": WHITELIST_IPs,
+                "IP1_INFILE": ip1,
+                "IP2_INFILE": ip2,
+                "TIME_INFILE": timeago,
+                "WHITE_INFILE": WHITELIST_IPs,
             },
             "AZDIAG_TIMEBETWEEN": {
-                "STARTTIME": start_t,
-                "ENDTIME": end_t,
-                "WHITE": WHITELIST_IPs,
+                "STARTTIME_INFILE": start_t,
+                "ENDTIME_INFILE": end_t,
+                "WHITE_INFILE": WHITELIST_IPs,
             },
             "AZDIAG_IP_TIMEBETWEEN": {
-                "STARTTIME": start_t,
-                "ENDTIME": end_t,
-                "SINGLEIP": singleip,
-                "WHITE": WHITELIST_IPs,
+                "STARTTIME_INFILE": start_t,
+                "ENDTIME_INFILE": end_t,
+                "SINGLEIP_INFILE": singleip,
+                "WHITE_INFILE": WHITELIST_IPs,
             },
             "AZDIAG_TIMEAGO": {
-                "TIME": timeago,
-                "WHITE": WHITELIST_IPs
+                "TIME_INFILE": timeago,
+                "WHITE_INFILE": WHITELIST_IPs
             },
             "APPREQ_TIMEAGO": {
-                "TIME": timeago
+                "TIME_INFILE": timeago
             },
             "APPPAGE_TIMEAGO": {
-                "TIME": timeago
+                "TIME_INFILE": timeago
             },
             "APPBROWSER_TIMEAGO": {
-                "TIME": timeago
+                "TIME_INFILE": timeago
             },
             "HTTPLogs_TIMEAGO": {
-                "TIME": timeago
+                "TIME_INFILE": timeago
             },
             "HTTPLogs_TIMEBETWEEN": {
-                "STARTTIME": start_t,
-                "ENDTIME": end_t
+                "STARTTIME_INFILE": start_t,
+                "ENDTIME_INFILE": end_t
             },
             "APPSERVIPSecTIMEAGO": {
-                "TIME": timeago
+                "TIME_INFILE": timeago
             },
         }
 

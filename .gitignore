@@ -17,3 +17,5 @@ sample.md
 frMOD.py
 matcher.py
 .aider*
+api_manager.py
+/v3
