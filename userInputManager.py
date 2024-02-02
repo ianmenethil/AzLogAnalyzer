@@ -1,11 +1,11 @@
 import logging
-
-logger = logging.getLogger(__name__)
 import sys
 from typing import List
 from configurator import console, LF, load_config_from_file
 from QF import QueryFormatter
 from timeManager import TimeManager
+
+logger = logging.getLogger(__name__)
 
 get_current_time_info = TimeManager.get_current_time_info
 is_date_string = TimeManager.is_date_string
@@ -43,7 +43,6 @@ class UserInputHandler():
         a3 = 'AZDIAG_IP_TIMEBETWEEN'
         a4 = 'AZDIAG_TIMEAGO'
         a5 = 'AZDIAG_CUSTOM_TIMEAGO'
-        # a11 = 'APPREQ_TIMEAGO'
         p1 = 'APPPAGE_TIMEAGO'
         r1 = 'APPREQ_TIMEAGO'
         b1 = 'APPBROWSER_TIMEAGO'
@@ -61,20 +60,20 @@ class UserInputHandler():
         # console.print(f'11a. [red]{a11}[/red]', style='blink', justify='center', markup=True)
         LF()
         console.print('[yellow]#' * 30 + 'AppRequests' + '#[/yellow]' * 30, style='bold', justify='center', markup=True)
-        console.print(f'1p. [blue]{p1} - not yet[/blue]', style='blink', justify='center', markup=True)
+        console.print(f'1p. [blue]{p1}[/blue]', style='blink', justify='center', markup=True)
         LF()
         console.print('[yellow]#' * 30 + 'AppPages' + '#[/yellow]' * 30, style='bold', justify='center', markup=True)
-        console.print(f'1r. [blue]{r1} - not yet[/blue]', style='blink', justify='center', markup=True)
+        console.print(f'1r. [blue]{r1}[/blue]', style='blink', justify='center', markup=True)
         LF()
         console.print('[yellow]#' * 30 + 'AppBrowser' + '#[/yellow]' * 30, style='bold', justify='center', markup=True)
-        console.print(f'1b. [blue]{b1} - not yet[/blue]', style='blink', justify='center', markup=True)
+        console.print(f'1b. [blue]{b1}[/blue]', style='blink', justify='center', markup=True)
         LF()
         console.print('[yellow]#' * 30 + 'AppServiceHTTPLogs' + '#[/yellow]' * 30, style='bold', justify='center', markup=True)
         console.print(f'1l. [blue]{l1}/blue]', style='blink', justify='center', markup=True)
         console.print(f'2l. [blue]{l2}[/blue]', style='blink', justify='center', markup=True)
         LF()
         console.print('[yellow]#' * 30 + 'AppServiceIPSec' + '#[/yellow]' * 30, style='bold', justify='center', markup=True)
-        console.print(f'1s. [blue]{s1} - not yet[/blue]', style='blink', justify='center', markup=True)
+        console.print(f'1s. [blue]{s1}[/blue]', style='blink', justify='center', markup=True)
         console.print('0. [magenta]Exit[/magenta]', style='blink', justify='center', markup=True)
 
     @staticmethod
@@ -118,43 +117,44 @@ class UserInputHandler():
         query_choice = UserInputHandler.select_query()
         query_name = query_choice
         ip1 = ip2 = None
-        time_format_msg = '\nAcceptable formats\nDD-MM-YY HH:MM or DD-MM-YY HH:MM:SS\n'
-        time_format_msg += f'{NOWINSYDNEY}'
+        time_format_msg = f'Acceptable T format {NOWINSYDNEY}'
+
         # ! AZDIAG_IP1IP2_TIMEAGO
         if query_name == "AZDIAG_IP1IP2_TIMEAGO":
             logger.info('AZDIAG_IP1IP2_TIMEAGO')
             ip1 = input('Enter value for IP1: ')
             ip2 = input('Enter value for IP2: ')
-            timeago = input('AZDIAG_IP1IP2_TIMEAGO: Enter value for TIMEAGO (e.g., 10m, 2h, 1d): ')
+            timeago = input('AZDIAG_IP1IP2_TIMEAGO: Enter value for TIMEAGO (10m, 2h, 1d): ')
             while not validate_timeago_variable(timeago):
                 logger.info('Invalid format. Please include (m)inutes, (h)ours, (d)ays, or (w)eeks. E.g., "10m" for 10 minutes.')
-                timeago = input('Enter value for TIMEAGO (e.g., 10m, 2h, 1d): ')
+                timeago = input('Enter value for TIMEAGO (10m, 2h, 1d): ')
             query_content = QueryFormatter.format_query(query_name, ip1=ip1, ip2=ip2, timeago=timeago, whitelist=WHITELIST_IPs)
 
         # ! AZDIAG_TIMEAGO
         elif query_name == "AZDIAG_TIMEAGO":
             logger.info('AZDIAG_TIMEAGO')
-            timeago = input('AZDIAG_TIMEAGO: Enter value for TIMEAGO (e.g., 10m, 2h, 1d): ')
+            timeago = input('AZDIAG_TIMEAGO: Enter value for TIMEAGO (10m, 2h, 1d): ')
             while not validate_timeago_variable(timeago):
                 logger.info('Invalid format. Please include (m)inutes, (h)ours, (d)ays, or (w)eeks. E.g., "10m" for 10 minutes.')
-                timeago = input('Enter value for TIMEAGO (e.g., 10m, 2h, 1d): ')
+                timeago = input('Enter value for TIMEAGO (10m, 2h, 1d): ')
             query_content = QueryFormatter.format_query(query_name, timeago=timeago, whitelist=WHITELIST_IPs)
 
         # ! F_AzDiag_CUSTOM_TIMEAGO
         elif query_name == "AZDIAG_CUSTOM_TIMEAGO":
             logger.info(f'AZDIAG_CUSTOM_TIMEAGO: {DYNAMIC_IPs}')
-            timeago = input('AZDIAG_CUSTOM_TIMEAGO: Enter value for TIMEAGO (e.g., 10m, 2h, 1d): ')
+            timeago = input('AZDIAG_CUSTOM_TIMEAGO: Enter value for TIMEAGO (10m, 2h, 1d): ')
             while not validate_timeago_variable(timeago):
                 logger.info('Invalid format. Please include (m)inutes, (h)ours, (d)ays, or (w)eeks. E.g., "10m" for 10 minutes.')
-                timeago = input('Enter value for TIMEAGO (e.g., 10m, 2h, 1d): ')
+                timeago = input('Enter value for TIMEAGO (10m, 2h, 1d): ')
             query_content = QueryFormatter.format_query(query_name, timeago=timeago, dynamiclist=DYNAMIC_IPs)
+
         # ! HTTPLogs_TIMEAGO
         elif query_name == "HTTPLogs_TIMEAGO":
             logger.info('HTTPLogs_TIMEAGO')
-            timeago = input('HTTPLogs_TIMEAGO: Enter value for TIMEAGO (e.g., 10m, 2h, 1d): ')
+            timeago = input('HTTPLogs_TIMEAGO: Enter value for TIMEAGO (10m, 2h, 1d): ')
             while not validate_timeago_variable(timeago):
                 logger.info('Invalid format. Please include (m)inutes, (h)ours, (d)ays, or (w)eeks. E.g., "10m" for 10 minutes.')
-                timeago = input('Enter value for TIMEAGO (e.g., 10m, 2h, 1d): ')
+                timeago = input('Enter value for TIMEAGO (10m, 2h, 1d): ')
             query_content = QueryFormatter.format_query(query_name, timeago=timeago, whitelist=WHITELIST_IPs)
 
         # ! AZDIAG_IP_TIMEBETWEEN
@@ -216,13 +216,17 @@ class UserInputHandler():
             logger.info(f'Converted start_time: {end_time}')
             query_content = QueryFormatter.format_query(query_name, start_t=start_time, end_t=end_time, whitelist=WHITELIST_IPs)
 
-        else:
-            console.print('Else: section ', style='bold', justify='center', markup=True)
-            sys.exit()
-            timeago = input('Else: Enter value for TIMEAGO(10m) (2h) (1d): ')
+        # ! AppReq_TIMEAGO
+        elif query_name == "APPREQ_TIMEAGO":
+            logger.info('APPREQ_TIMEAGO')
+            logger.info(f'Current Date: {TODAY}')
+            timeago = input('APPREQ_TIMEAGO | Enter value for TIMEAGO(10m) (2h) (1d): ')
             while not validate_timeago_variable(timeago):
                 logger.info('Invalid format. Please include (m)inutes, (h)ours, (d)ays, or (w)eeks. E.g., "10m" for 10 minutes.')
-                timeago = input('Enter value for TIMEAGO (e.g., 10m, 2h, 1d): ')
+                timeago = input('Enter value for TIMEAGO (10m, 2h, 1d): ')
             query_content = QueryFormatter.format_query(query_name, timeago=timeago)
+            logger.info(f'query_content: {query_content}')
+        else:
+            logger.error('Else: section ', exc_info=True, stack_info=True, extra={'color': 'red'}, stacklevel=2)
             sys.exit()
         return query_name, query_content

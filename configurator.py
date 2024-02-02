@@ -90,6 +90,7 @@ class AppConfigurations(TypedDict):
     AZDIAG_EXCEL_FILEPATH: Path
     AZDIAG_EXCEL_FINAL_FILEPATH: Path
     AZDIAG_EXCEL_COMBINED_FILE: Path
+    TEMP_EXCEL_FILE: Path
     Extraction_LogFILE: str
     TOKEN_URL: str
     AZLOG_ZEN_ENDPOINT: str

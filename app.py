@@ -1,40 +1,32 @@
 # app.py  # pylint disable=too-many-lines # pylint: disable=C0302
-from configurator import setup_logging
-import logging  # pylint: disable=wrong-import-order
-import json  # pylint: disable=wrong-import-order
-import os  # pylint: disable=wrong-import-order
-from openpyxl import load_workbook  # pylint: disable=wrong-import-order
-from typing import Any, Tuple, List, Dict, cast  # pylint: disable=wrong-import-order
-import sys  # pylint: disable=wrong-import-order
-from pathlib import Path  # pylint: disable=wrong-import-order
-import pandas as pd  # pylint: disable=wrong-import-order
-import httpx  # pylint: disable=wrong-import-order
-from configurator import console, ExcelConfigurations, RegexConfigurations, AppConfigurations, LF
-from compareHeaders import compare_and_write_output
-from timeManager import TimeManager
-from configLoader import ConfigLoader
-from userInputManager import UserInputHandler
-from excelManager import ExcelManager
-# from backupManager import BackupManager
-from fileManager import FileManager
-from regexManager import RegexManager
-from logManager import LogManager
+import logging
+import json
+import os
+from openpyxl import load_workbook
+from typing import Any, Tuple, List, Dict, cast
+import sys
+from pathlib import Path
+import pandas as pd
+import httpx
+from configurator import setup_logging, console, ExcelConfigurations, RegexConfigurations, AppConfigurations, LF
 
 setup_logging()
+from compareHeaders import compare_and_write_output  # pylint: disable=wrong-import-position
+from timeManager import TimeManager  # pylint: disable=wrong-import-position
+from configLoader import ConfigLoader  # pylint: disable=wrong-import-position
+from userInputManager import UserInputHandler  # pylint: disable=wrong-import-position
+from excelManager import ExcelManager  # pylint: disable=wrong-import-position
+# from backupManager import BackupManager  # pylint: disable=wrong-import-position
+from fileManager import FileManager  # pylint: disable=wrong-import-position
+from regexManager import RegexManager  # pylint: disable=wrong-import-position
+from logManager import LogManager  # pylint: disable=wrong-import-position
 
 logger = logging.getLogger(__name__)
 get_current_time_info = TimeManager.get_current_time_info
-convert_syd_to_aztime = TimeManager.convert_syd_to_aztime
-validate_starttime_endtime = TimeManager.validate_starttime_endtime
 convert_utc_to_sydney = TimeManager.convert_utc_to_sydney
-validate_timeago_variable = TimeManager.validate_timeago_variable
 
 OUTPUT_FOLDER: str = 'AZLOGS'
 LOG_FOLDER: str = f'{OUTPUT_FOLDER}/LOG'
-# if not Path(OUTPUT_FOLDER).is_dir():
-#     Path(OUTPUT_FOLDER).mkdir()
-# if not Path(LOG_FOLDER).is_dir():
-#     Path(LOG_FOLDER).mkdir()
 CL_TimeGenerated: str = 'TimeGenerated'
 CL_LocalTime: str = 'LocalTime'
 DELALL_FEXT: Tuple[str, str, str, str] = ('.csv', '.xlsx', '.log', '.txt')
@@ -48,10 +40,7 @@ class APIManager():
         and returns the response as a JSON object."""
         try:
             logger.info('Calling Azure with following query')
-            LF()
             console.print(query, style='blink', justify='left')
-            LF()
-            console.print(headers, style='underline', justify='left')
             LF()
             headers['Content-Type'] = 'application/json'
             response = httpx.post(url=zen_endpoint, data=query, headers=headers, timeout=60)
@@ -65,7 +54,7 @@ class APIManager():
         return {}
 
     @staticmethod
-    def save_new_token(token_url, client_id, client_secret, resource_scope, token_file) -> Any | tuple[None, None]:
+    def save_new_token(token_url, client_id, client_secret, resource_scope, token_file):
         """The `save_new_token` function sends a request to obtain a new token using client credentials, saves
         the token response to a file, and returns the token response."""
         try:
@@ -114,7 +103,6 @@ class APIManager():
         else:
             logger.info('Incorrect query, exiting...')
             sys.exit()
-
         token_info = APIManager.save_new_token(token_url, client_id, client_secret, resource_scope, token_file_path)
         if not token_info:
             logger.warning("Failed to refresh access token.")
@@ -122,7 +110,6 @@ class APIManager():
         try:
             token_key = token_info["access_token"]  # type: ignore
             headers = {'Authorization': f'Bearer {token_key}'}
-            # logger.info(f"Headers: {headers}") # !
 
             if response := APIManager.get_logs_from_azure_analytics(KQL, headers, endpoint):
                 FileManager.save_json(response, json_file_path)
@@ -148,35 +135,37 @@ class FileHandler():
                     dataframe_row_length = len(df.index)
                     dataframe_column_length = len(df.columns)
                     dataframe_column_names_before_drop = set(df.columns)
-                    logger.info(f'Before dropna - DF Rows: {dataframe_row_length}, DF Columns: {dataframe_column_length}')
+                    logger.info(f'Before dropna, DF Rows: {dataframe_row_length}, DF Columns: {dataframe_column_length}')
                     LogManager.save_removed_rows_to_raw_logs(df, log_file)
                     with open(log_file, 'a', encoding='utf-8') as f:
-                        f.write('Before dropna - Column name,Number of rows\n')
+                        f.write('Before dropna,Column name,Number of rows\n')
                         for c in df.columns:
-                            f.write(f'{c},{dataframe_row_length}\n')
+                            f.write(f'Before dropna,{c},{dataframe_row_length}\n')
 
-                    # Dropping columns with all NaN values
                     df.dropna(axis=1, how='all', inplace=True)
                     dataframe_column_names_after_drop = set(df.columns)
 
                     # Logging and writing after dropna
-                    logger.info('###After dropna###')
                     logger.info(f'After dropna - DF Rows: {len(df.index)}, DF Columns: {len(df.columns)}')
-
                     with open(log_file, 'a', encoding='utf-8') as f:
-                        f.write('\nAfter dropna - Column name,Number of rows\n')
+                        f.write('\nAfter dropna,Column name,Number of rows\n')
                         for c in df.columns:
-                            f.write(f'{c},{len(df.index)}\n')
+                            f.write(f'After dropna,{c},{len(df.index)}\n')
+                    # with open(log_file, 'a', encoding='utf-8') as f:
+                    #     f.write('\nAfter dropna - Column name,Number of rows\n')
+                    #     for c in df.columns:
+                    #         f.write(f'{c},{len(df.index)}\n')
 
-                    # Identify dropped columns due to NaN and log them
-                    # columns_dropped = dataframe_column_names_before_drop - dataframe_column_names_after_drop
-                    # if columns_dropped:
+                    # if (columns_dropped := dataframe_column_names_before_drop - dataframe_column_names_after_drop):
+                    #     with open(log_file, 'a', encoding='utf-8') as f:
+                    #         f.write('\nDropped columns due to all NaN\n')
+                    #         for c in columns_dropped:
+                    #             f.write(f'{c}\n')
                     if (columns_dropped := dataframe_column_names_before_drop - dataframe_column_names_after_drop):
                         with open(log_file, 'a', encoding='utf-8') as f:
-                            f.write('\nDropped columns due to all NaN\n')
+                            f.write('\nDropped columns due to all NaN,Column name\n')
                             for c in columns_dropped:
-                                f.write(f'{c}\n')
-
+                                f.write(f'Dropped columns due to all NaN,{c}\n')
                     # Saving the DataFrame to CSV after dropping NaN columns
                     df.to_csv(filename, index=False, encoding='utf-8')
                     logger.info(f'Saved {filename}')
@@ -201,6 +190,7 @@ class FileHandler():
                 logger.warning(f"Column {source_col} not found in DF.")
             # ? Add LocalTime column
             else:
+                logger.info(f"Column {source_col} found in DF. Adding {dest_col} column to DF.")
                 df.insert(0, dest_col, new_column_data)
             df.to_csv(output_file, index=False)
             logger.info(f"DataFrame saved to CSV with new order: {output_file}")
@@ -208,62 +198,10 @@ class FileHandler():
             logger.error(f'Error in processing data: {e}', exc_info=True, stack_info=True)
 
 
-# class DataFrameManipulator():
-
-# @staticmethod
-# def processExclusionPairs(df: pd.DataFrame, filename: str, exclusion_pairs, log_file: str) -> Any | DataFrame:
-#     try:
-#         for column, values_to_exclude in exclusion_pairs.items():
-#             if column in df.columns:
-#                 logger.info(f"Column: {column} found in DF. Values to exclude: {values_to_exclude}")
-#                 filter_condition = df[column].isin(values_to_exclude)
-#                 # ! Capture the rows that will be removed
-#                 removed_rows = df[filter_condition].copy()  # ? Use .copy() to avoid SettingWithCopyWarning
-#                 # ? Log the removed rows if there are any
-#                 if not removed_rows.empty:
-#                     pattern = f"Exclusion: {values_to_exclude}"
-#                     LogManager.save_removed_rows_to_raw_logs(removed_rows, log_file)
-#                     logger.info(f"Removed rows based on column '{column}' and pattern '{pattern}' have been logged to {log_file}")
-#                 # ? update df to exclude the rows
-#                 df = df[~filter_condition]
-#                 if df.empty:
-#                     logger.info("DataFrame is empty after exclusion.")
-#                     break  # ! Exit the loop if df is empty
-#                 # ! Identify columns that may be dropped due to becoming entirely NaN
-#                 columns_before = set(df.columns)
-#                 df.dropna(axis=1, how='all')
-#                 # df.dropna(axis=1, how='all', inplace=True)
-#                 columns_after = set(df.columns)
-#                 # columns_dropped = columns_before - columns_after  # ? NOTE
-#                 # if columns_dropped:
-#                 if columns_dropped := columns_before - columns_after:
-#                     logger.info(f"Columns dropped because they became empty after exclusion: {columns_dropped}")
-#                 else:
-#                     logger.warning("No columns were dropped after exclusion.")
-#         # ! After processing, save the potentially modified df
-#         if not df.empty:
-#             df.to_csv(filename, index=False)
-#             logger.info(f"Modified DF saved to {filename}")
-#         else:
-#             logger.warning("DataFrame is empty after exclusions. Skipping saving to CSV.")
-#         return df
-#     except Exception as e:
-#         logger.error(f"Error in exclusion processing: {e}", exc_info=True)
-#         return df
-
-# @staticmethod
-# def find_duplicate_columns(df) -> Any:
-#     """The function `find_duplicate_columns` takes a DF as input and returns a list of duplicate
-#     column names."""
-#     duplicate_columns = df.columns[df.columns.duplicated()]
-#     # logger.info(f"Duplicate columns: {duplicate_columns.tolist()}")
-#     return duplicate_columns.tolist()
-
-
 class DataProcessor():
 
     @staticmethod
-    def process_data(JSON_FILE, CSV_FILE, LOGS_FILE, EXCEL_FILE):
+    def process_data(JSON_FILE, CSV_FILE, LOGS_FILE, EXCEL_FILE) -> Any:
         try:
             JSONDATA = FileManager.read_json(filename=JSON_FILE)
             if 'tables' in JSONDATA:
@@ -289,63 +227,51 @@ class DataProcessor():
 
 
 def reorder_sheets(excel_file: str, focused_cols_set: list) -> None:
-    # Step 1 & 2: Loading and filtering the DataFrame
     final_sheet_dataframe = pd.read_excel(excel_file, sheet_name='Sheet1')
     columns_to_include = [col for col in focused_cols_set if col in final_sheet_dataframe.columns]
     focused_df = final_sheet_dataframe[columns_to_include]
-
-    # Load the workbook
     wb = load_workbook(excel_file)
 
-    # Check if 'AllData' sheet exists, if not, create it and copy data from 'Sheet1'
     if 'AllData' not in wb.sheetnames:
         all_data_sheet = wb.create_sheet('AllData')
-        # Assuming 'Sheet1' is the name of the sheet you want to copy data from
         sheet1 = wb['Sheet1']
         for row in sheet1.iter_rows(values_only=True):
             all_data_sheet.append(row)
-        # Remove 'Sheet1' after copying
         del wb['Sheet1']
 
-    # Save changes to keep 'AllData'
     wb.save(excel_file)
-
-    # Now, use pandas to add 'FocusedColumns' as the first sheet
     with pd.ExcelWriter(excel_file, engine='openpyxl', mode='a') as writer:
         focused_df.to_excel(writer, sheet_name='FocusedColumns', index=False)
 
-    # Reload workbook to reorder sheets
     wb = load_workbook(excel_file)
     sheets = wb.sheetnames
     focused_idx = sheets.index('FocusedColumns')
     sheets = [sheets.pop(focused_idx)] + sheets  # Move 'FocusedColumns' to the first position
     wb._sheets = [wb[s] for s in sheets]  # type: ignore
-
-    # Save the workbook with the reordered sheets
     wb.save(excel_file)
 
 
-# ! TIME
-time_info = get_current_time_info()
-NOWINSYDNEY: str = time_info['NOWINSYDNEY']
-NOWINAZURE: str = time_info['NOWINAZURE']
-TODAY: str = time_info['TODAY']
-NOWINSYDNEY_FILEFORMAT: str = time_info['NOWINSYDNEY_FILEFORMAT']
-NOWINAZURE_FILEFORMAT: str = time_info['NOWINAZURE_FILEFORMAT']
-logger.info(f'Sydney Time {NOWINSYDNEY}')
-logger.info(f'NOWINAZURE Time {NOWINAZURE}')
+# # ! TIME
+# time_info = get_current_time_info()
+# NOWINSYDNEY: str = time_info['NOWINSYDNEY']
+# NOWINAZURE: str = time_info['NOWINAZURE']
+# TODAY: str = time_info['TODAY']
+# NOWINSYDNEY_FILEFORMAT: str = time_info['NOWINSYDNEY_FILEFORMAT']
+# NOWINAZURE_FILEFORMAT: str = time_info['NOWINAZURE_FILEFORMAT']
+# logger.info(f'Sydney Time {NOWINSYDNEY}')
+# logger.info(f'NOWINAZURE Time {NOWINAZURE}')
 
-# ! OPTIONS
-azdiag1 = 'AZDIAG_IP1IP2_TIMEAGO'
-azdiag2 = 'AZDIAG_TIMEBETWEEN'
-azdiag3 = 'AZDIAG_IP_TIMEBETWEEN'
-azdiag4 = 'AZDIAG_TIMEAGO'
-req1 = 'APPREQ_TIMEAGO'
-page1 = 'APPPAGE_TIMEAGO'
-browser1 = 'APPBROWSER_TIMEAGO'
-httplogs1 = 'HTTPLogs_TIMEAGO'
-httplogs2 = 'HTTPLogs_TIMEBETWEEN'
-ipsec1 = 'APPSERVIPSec_TIMEAGO'
+# # ! OPTIONS
+# azdiag1 = 'AZDIAG_IP1IP2_TIMEAGO'
+# azdiag2 = 'AZDIAG_TIMEBETWEEN'
+# azdiag3 = 'AZDIAG_IP_TIMEBETWEEN'
+# azdiag4 = 'AZDIAG_TIMEAGO'
+# req1 = 'APPREQ_TIMEAGO'
+# page1 = 'APPPAGE_TIMEAGO'
+# browser1 = 'APPBROWSER_TIMEAGO'
+# httplogs1 = 'HTTPLogs_TIMEAGO'
+# httplogs2 = 'HTTPLogs_TIMEBETWEEN'
+# ipsec1 = 'APPSERVIPSec_TIMEAGO'
 
 
 def main() -> None:
@@ -374,11 +300,14 @@ def main() -> None:
     EXCEL_FILE: Path = Path(az_config['AZDIAG_EXCEL_FILEPATH'])
     EXCEL_FINAL_FILE: Path = Path(az_config['AZDIAG_EXCEL_FINAL_FILEPATH'])
     AZDIAG_EXCEL_COMBINED: Path = Path(az_config['AZDIAG_EXCEL_COMBINED_FILE'])
+    TMPEXCEL: Path = Path(az_config['TEMP_EXCEL_FILE'])
     LOG_FILE: str = az_config['Extraction_LogFILE']
     TOKEN_URL: str = f'https://login.microsoftonline.com/{TENANT_ID}/oauth2/token'
     AZLOG_ZEN_ENDPOINT: str = f'{AZLOG_ENDPOINT}{ZEN_WORKSPACE_ID}/query'
+    IP_DIR = 'IPCheck'
     # AZLOG_ZEN_ENDPOINT: str = 'http://127.0.0.1:5000/query'
     # TOKEN_URL: str = 'http://127.0.0.1:5000/token'
+
     if Path(JSON_FILE).is_file():
         new_data_choice = input('Get data?')
         if new_data_choice == '':
@@ -387,44 +316,41 @@ def main() -> None:
         else:
             logger.info(f'Choice: {new_data_choice} - New data will be fetched.')
             Path(JSON_FILE).unlink(missing_ok=True)
+    logger.info(f'Fetching data from: {JSON_FILE}')
     if Path(TOKEN_FILEPATH_STR).is_file():
         Path(TOKEN_FILEPATH_STR).unlink(missing_ok=True)
     FileManager.remove_files_from_folder(folder=OUTPUT_FOLDER, file_extension=DELALL_FEXT)
+    logger.info(f'Removed files from {OUTPUT_FOLDER} with extension: {DELALL_FEXT}')
     LF()
     if Path(JSON_FILE).is_file():
-        # query_name_for_local = UserInputHandler.select_query()
         DataProcessor.process_data(JSON_FILE, CSV_FILE, LOG_FILE, EXCEL_FILE)
-        logger.info(f'Processed local data from source: {JSON_FILE}')
-        logger.info(f'Excel file saved to: {EXCEL_FILE}')
-        # BackupManager.manage_backups(OUTPUT_FOLDER, query_name_for_local)
-
+        logger.info(f'Local data source: {JSON_FILE}')
+        logger.info(f'Saved to: {EXCEL_FILE}')
     else:
         data, query_name = APIManager.fetch_and_save_api_data(TOKEN_URL, CLIENT_ID, CLIENT_SECRET, AZDIAG_SCOPE, TOKEN_FILEPATH_STR, JSON_FILE, AZLOG_ZEN_ENDPOINT)
         logger.info(f'Query name: {query_name}')
         logger.info(f'API data saved to: {JSON_FILE}')
         if data:
             DataProcessor.process_data(JSON_FILE, CSV_FILE, LOG_FILE, EXCEL_FILE)
-            logger.info(f'Processed API data from source: {JSON_FILE}')
-            logger.info(f'Excel file saved to: {EXCEL_FILE}')
-            # BackupManager.manage_backups(OUTPUT_FOLDER, query_name)
+            logger.info(f'API data from source: {JSON_FILE}')
+            logger.info(f'Saved to: {EXCEL_FILE}')
         else:
             logger.error('Failed to process API data.')
 
-    # At this point Excel should be ready after the refactor we need to apply regex from here onwards
     try:
-        data = pd.read_excel(EXCEL_FILE)
         logger.info(f'Excel file loaded from: {EXCEL_FILE}')
+        data = pd.read_excel(EXCEL_FILE)
     except Exception as e:
         logger.error(f'Error in read_excel exiting: {e}', exc_info=True, stack_info=True)
         sys.exit()
+
     # ! Filter based on pattern
     try:
-        # filter_df_based_on_patterns replaced remove_patterns, remove_regex_patterns,remove_key_value_patterns
-        RegexManager.filter_df_based_on_patterns(df=data, config_dict=MATCH_VALUE_TO_SPECIFIC_COLUMN, output_dir=OUTPUT_FOLDER)
         logger.info(f'Filtered based on patterns: {MATCH_VALUE_TO_SPECIFIC_COLUMN}')
+        RegexManager.filter_df_based_on_patterns(df=data, config_dict=MATCH_VALUE_TO_SPECIFIC_COLUMN, output_dir=OUTPUT_FOLDER)
     except Exception as e:
         logger.error(f'Error in filter_df_based_on_patterns: {e}', exc_info=True, stack_info=True)
-
+    input('halt')
     try:
         EXCEL_FILE_STR = str(EXCEL_FILE)
         EXCEL_FINAL_FILE_STR = str(EXCEL_FINAL_FILE)
@@ -437,21 +363,25 @@ def main() -> None:
     except Exception as e:
         logger.error(f'Error in create_final_excel: {e}', exc_info=True, stack_info=True)
 
+    # try:
+    #     df = pd.read_excel(EXCEL_FILE)  # type: ignore
+    #     logger.info(f'Excel file loaded: {EXCEL_FILE}')
     try:
-        df = pd.read_excel('AZLOGS/AZDIAG.xlsx')  # type: ignore
-        logger.info('Excel file loaded: AZLOGS/AZDIAG.xlsx')
+        df = pd.read_excel(EXCEL_FINAL_FILE)  # type: ignore
+        logger.info(f'Excel file loaded: {EXCEL_FINAL_FILE}')
         column_names = df.columns.tolist()
         df.dropna(axis=1, how='all', inplace=True)
         col_names_after_drop = df.columns.tolist()
         dropped_columns = list(set(column_names) - set(col_names_after_drop))
         logger.info(f'Columns dropped: {dropped_columns}')
         regexdf = RegexManager.filter_df_based_on_patterns(df=df, config_dict=MATCH_VALUE_TO_SPECIFIC_COLUMN, output_dir=OUTPUT_FOLDER)
-        temp_path = 'AZLOGS/regexdf.xlsx'
+        temp_path: str = str(TMPEXCEL)
         regexdf.to_excel(temp_path, index=False)
     except Exception as e:
         logger.error(f'read_excel: {e}', exc_info=True, stack_info=True)
+
     try:
-        temp_path = 'AZLOGS/regexdf.xlsx'
+        temp_path = str(TMPEXCEL)
         ExcelManager.create_final_excel(input_file=temp_path,
                                         output_file=str(EXCEL_FINAL_FILE),
                                         logfile=LOG_FILE,
@@ -460,21 +390,48 @@ def main() -> None:
     except Exception as e:
         logger.error(f'Error in reading Excel file: {e}', exc_info=True, stack_info=True)
     LF()
-    COMPARE_HEADER_FILE = 'AZLOGS/COMPARE_HEADER.xlsx'
-    compare_and_write_output(CSV_FILE, EXCEL_FINAL_FILE, COMPARE_HEADER_FILE)
+    # cs = os.path.splitext(CSV_FILE)
+    # ex = os.path.splitext(EXCEL_FINAL_FILE)
+    # COMPARE_HEADER_FILE = str(cs) + '_' + str(ex) + '_compare_headers.xlsx'
+
+    # compare_and_write_output(CSV_FILE, EXCEL_FINAL_FILE, COMPARE_HEADER_FILE)
+    compare_and_write_output(CSV_FILE, EXCEL_FINAL_FILE)
     LF()
     focused_cols_set = [
-        'LocalTime', 'IPs', 'userAgent_s', 'Method_Type', 'QueryType', 'QueryParameters', 'Query', 'Host', 'httpStatus_d', 'serverStatus_s', 'timeTaken_d',
-        'serverResponseLatency_s', 'WAFMode_s', 'ruleName_s', 'clientResponseTime_d', 'clientResponseLatency_s'
-        # 'mPay_OneOffPaymentSuccessful', 'Pay_PublicOneOffPaymentMerchantSearchByCode', 'CYBS_StepUp', 'Pay_InitiatePayment', 'CYBS_getsignedobject',
-        # 'Pay_PublicOneOffPaymentConfirmation', 'Authorise', 'GetProcessorInfo', 'mPay_GetTransactionFee', 'CYBS_Direct', 'v3_Authorise', 'Pay_ReviewPayment',
+        'LocalTime',
+        'IPs',
+        'userAgent_s',
+        'Method_Type',
+        'QueryType',
+        'QueryParameters',
+        'Query',
+        'Host',
+        'httpStatus_d',
+        'serverStatus_s',
+        'timeTaken_d',
+        'serverResponseLatency_s',
+        'WAFMode_s',
+        'ruleName_s',
+        'clientResponseTime_d',
+        'clientResponseLatency_s'  # !
+        # 'mPay_OneOffPaymentSuccessful',
+        # 'Pay_PublicOneOffPaymentMerchantSearchByCode',
+        # 'CYBS_StepUp',
+        # 'Pay_InitiatePayment',
+        # 'CYBS_getsignedobject',
+        # 'Pay_PublicOneOffPaymentConfirmation',
+        # 'Authorise',
+        # 'GetProcessorInfo',
+        # 'mPay_GetTransactionFee',
+        # 'CYBS_Direct',
+        # 'v3_Authorise',
+        # 'Pay_ReviewPayment', #
     ]
 
     reorder_sheets(str(EXCEL_FINAL_FILE), focused_cols_set)
     logger.info('Sheet order updated successfully.')
 
     # !
-    IP_FOLDER = 'IPCheck'
     source_files = [EXCEL_FINAL_FILE]
     first_file = EXCEL_FILE
     columns = ['clientIP_s', 'clientIp_s']
@@ -482,7 +439,7 @@ def main() -> None:
     chars = '[]"'
     for col in columns:
         unique_data = ExcelManager.read_and_filter_excel(first_file, columns=[col])
-        logger.info(f"Unique data collected: {unique_data}")
+        logger.info(f"Unique data collected: {unique_data} from {first_file} for column: {col}")
 
         cleaned_unique_data = []
 
@@ -494,7 +451,7 @@ def main() -> None:
         unique_data = cleaned_unique_data
         for data in unique_data:
             logger.info(f"Processing IP: {data}")
-            ip_file = f"{IP_FOLDER}/{data}.xlsx"
+            ip_file = f"{IP_DIR}/{data}.xlsx"
 
             if os.path.exists(ip_file):
                 source_files.append(Path(ip_file))
