@@ -84,7 +84,7 @@ class TimeManager:
         """Prompt the user for a datetime input and validate it to a proper format."""
         while True:
             input_time = input(prompt)
-            if re.match(r'^\d{2}-\d{2}-\d{2} \d{2}:\d{2}(-\d{2})?$', input_time):
+            if re.match(r'^\d{2}-\d{2}-(\d{2}|\d{4}) \d{2}:\d{2}(-\d{2})?$', input_time):
                 try:
                     datetime.strptime(input_time, '%d-%m-%y %H:%M')
                     return input_time

@@ -4,6 +4,7 @@ import logging
 import stat
 
 logger = logging.getLogger(__name__)
+CONFIG_FILE = 'config/config.yaml'
 
 
 class ConfigLoader():
@@ -14,7 +15,7 @@ class ConfigLoader():
         regexConfigurator object, and the result of loading a configuration from a file."""
         config_keys = ['CL_INIT_ORDER', 'CL_DROPPED', 'CL_FINAL_ORDER', 'EXCLUSION_PAIRS']
         regex_keys = ['MATCH_VALUE_TO_SPECIFIC_COLUMN']
-        return excelConfigurator(config_keys), regexConfigurator(regex_keys), load_config_from_file()
+        return excelConfigurator(config_keys), regexConfigurator(regex_keys), load_config_from_file(CONFIG_FILE)
 
 
 class SystemUtils():

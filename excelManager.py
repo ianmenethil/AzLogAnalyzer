@@ -1,6 +1,9 @@
 import logging
 from typing import List, Dict, Any
 import pandas as pd  # pylint: disable=C0411
+from pandas.errors import EmptyDataError
+from openpyxl import load_workbook, Workbook
+import csv
 
 logger = logging.getLogger(__name__)
 
@@ -8,7 +11,10 @@ logger = logging.getLogger(__name__)
 class ExcelManager():
 
     @staticmethod
-    def excelCreate(input_csv_file, output_excel_file,) -> None:
+    def excelCreate(
+        input_csv_file,
+        output_excel_file,
+    ) -> None:
         try:
             df = pd.read_csv(input_csv_file, low_memory=False)
             df = df.dropna(axis=1, how='all')
@@ -40,6 +46,7 @@ class ExcelManager():
 
     @staticmethod
     def create_final_excel(input_file: str, output_file: str, logfile: str, columns_to_be_dropped: List[str], final_column_order: List[str]):
+
         def concatenate_values(row: pd.Series, columns: List[str], include_col_names: bool = False) -> str:
             if include_col_names:
                 return ', '.join([f'{col}: "{row[col]}"' for col in columns if pd.notna(row[col])])
@@ -55,6 +62,12 @@ class ExcelManager():
                     df[col_name] = df.apply(lambda row, cols=existing_cols: concatenate_values(row, cols, info['include_names']), axis=1)  # pylint: disable=W0640
                     logger.info(f'New column "{col_name}" created with values from columns: {existing_cols} - Total rows: {df.shape[0]}')
                     if col_name != 'Qs':
+                        columns_to_drop_due_to_concat.extend(existing_cols)
+                    elif col_name != 'Method_Type':
+                        columns_to_drop_due_to_concat.extend(existing_cols)
+                    elif col_name != 'IPs':
+                        columns_to_drop_due_to_concat.extend(existing_cols)
+                    elif col_name != 'Host':
                         columns_to_drop_due_to_concat.extend(existing_cols)
                     else:
                         logger.info(f'Columns kept: {existing_cols}')
@@ -90,28 +103,28 @@ class ExcelManager():
 
         def apply_final_column_order_and_save(df: pd.DataFrame, final_column_order: List[str], output_file: str, available_columns_before_drop: set) -> None:
             final_order_logs = []
-            final_order_logs += ['Final order started']
-            final_order_logs += ['actual_final_order']
+            final_order_logs.append('Final order started')
+            final_order_logs.append('actual_final_order')
             actual_final_order = [col for col in final_column_order if col in df.columns]
-            final_order_logs += [str(actual_final_order)]
-            final_order_logs += ['specified_columns']
+            final_order_logs.append(','.join(actual_final_order))
+            final_order_logs.append('specified_columns')
             specified_columns = set(actual_final_order)
-            final_order_logs += [str(specified_columns)]
-            final_order_logs += ['unspecified_columns']
+            final_order_logs.append(','.join(specified_columns))
+            final_order_logs.append('unspecified_columns')
             unspecified_columns = available_columns_before_drop - specified_columns
-            final_order_logs += [str(unspecified_columns)]
-            final_order_logs += ['unspecified_columns']
+            final_order_logs.append(','.join(unspecified_columns))
+            final_order_logs.append('unspecified_columns')
             unspecified_columns = unspecified_columns - set(columns_to_be_dropped)
-            final_order_logs += [str(unspecified_columns)]
-            final_order_logs += ['final_columns_list']
+            final_order_logs.append(','.join(unspecified_columns))
+            final_order_logs.append('final_columns_list')
 
             final_columns_list = actual_final_order + [col for col in list(unspecified_columns) if col in df.columns]
-            final_order_logs += [str(final_columns_list)]
-            LOG_FOLDER = 'AZLOGS'
-            FINAL_ORDER_LOG_FILE = LOG_FOLDER + 'finalOrder.log'
-            with open(FINAL_ORDER_LOG_FILE, 'w', encoding='utf-8') as f:
-                f.write('\n'.join(final_order_logs))
-                logger.info(f'Final order log file created: {FINAL_ORDER_LOG_FILE}')
+            final_order_logs.append(','.join(final_columns_list))
+
+            with open(logfile, 'w', newline='', encoding='utf-8') as f:
+                writer = csv.writer(f)
+                writer.writerow(final_order_logs)
+                logger.info(f'Final order log file created: {logfile}')
             logger.info(f'Final columns list: {final_columns_list}')
             try:
                 # ! Subset df with the final columns list
@@ -179,8 +192,51 @@ class ExcelManager():
         # ! Section 3
         apply_final_column_order_and_save(df, final_column_order, output_file, available_columns_before_drop)
 
+    @staticmethod
+    def read_and_filter_excel(file_path, columns=None) -> list[Any]:
+        """
+        Reads specified columns from an Excel file and returns unique non-blank values.
+        """
+        if columns is None:
+            columns = ['', '']
+        try:
+            df = pd.read_excel(file_path, usecols=columns)
+            unique_data = pd.unique(df[columns].values.ravel('K'))
+            unique_data = [data for data in unique_data if pd.notna(data)]
+            return unique_data
+        except FileNotFoundError:
+            print(f"Error: The file {file_path} was not found.")
+        except EmptyDataError:
+            print("Error: The file is empty.")
+        except ValueError as e:
+            print(f"Error: {e}. Check if the columns exist.")
+        return []
 
+    @staticmethod
+    def copy_sheets_to_new_file(source_files, new_file):
+        """
+        Copies all sheets from given source Excel files to a new Excel file.
+        """
+        try:
+            new_wb = Workbook()
+            new_wb.remove(new_wb.active)  # type: ignore
 
+            for file in source_files:
+                wb = load_workbook(file)
+                for sheet_name in wb.sheetnames:
+                    source = wb[sheet_name]
+                    target = new_wb.create_sheet(title=sheet_name)
+
+                    for row in source:
+                        for cell in row:
+                            target[cell.coordinate].value = cell.value
+
+            new_wb.save(new_file)
+            print(f"New file {new_file} has been created with all copied sheets.")
+        except FileNotFoundError as e:
+            print(f"Error: {e}. One of the source files was not found.")
+        except Exception as e:
+            print(f"An unexpected error occurred: {e}")
 
 
 # class ExcelManager():

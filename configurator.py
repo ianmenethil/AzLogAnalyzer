@@ -3,18 +3,14 @@ import os
 import json
 import logging
 from pathlib import Path
-from typing import Any, List, Dict, Tuple, Union, TypedDict, Optional  # pylint: disable=unused-import
-import functools  # pylint: disable=unused-import
-import inspect  # pylint: disable=unused-import
-import traceback  # pylint: disable=unused-import
+from typing import Any, List, Dict, TypedDict
+import re
 import yaml
 from rich.console import Console
-from rich.traceback import install, Traceback  # pylint: disable=unused-import
-from rich.pretty import pprint  # pylint: disable=unused-import
+from rich.traceback import install
 from rich.logging import RichHandler
 from rich.pretty import Pretty
 from rich.text import Text
-import re
 
 COLUMN_CONFIG_FILE = 'config/column_config.yaml'
 CONFIG_FILE = 'config/config.yaml'
@@ -26,9 +22,9 @@ if not Path(LOG_FOLDER).is_dir():
     Path(LOG_FOLDER).mkdir()
 
 
-def load_config_from_file() -> Any | dict:
+def load_config_from_file(filename) -> Any | dict:
     try:
-        with open(CONFIG_FILE, 'r', encoding='utf-8') as file:
+        with open(filename, 'r', encoding='utf-8') as file:
             config = yaml.safe_load(file)
         return config
     except Exception as e:
@@ -36,7 +32,7 @@ def load_config_from_file() -> Any | dict:
         return {}
 
 
-def LF():
+def LF() -> None:
     return print('\n')
 
 
@@ -93,6 +89,7 @@ class AppConfigurations(TypedDict):
     AZDIAG_CSV_FILEPATH_STR: str
     AZDIAG_EXCEL_FILEPATH: Path
     AZDIAG_EXCEL_FINAL_FILEPATH: Path
+    AZDIAG_EXCEL_COMBINED_FILE: Path
     Extraction_LogFILE: str
     TOKEN_URL: str
     AZLOG_ZEN_ENDPOINT: str
@@ -117,7 +114,7 @@ class CustomRichHandler(RichHandler):
         if log_level == "INFO":
             return Text(log_level, style="bold green")
         elif log_level == "WARNING":
-            return Text(log_level, style="bold red")
+            return Text(log_level, style="bold yellow")
         elif log_level == "ERROR":
             return Text(log_level, style="bold red")
         elif log_level == "DEBUG":
@@ -203,7 +200,7 @@ def setup_logging() -> None:
         datefmt="[%X]",
         handlers=[
             CustomRichHandler(
-                level=logging.INFO,
+                level=logging.DEBUG,
                 console=console,
                 show_time=True,
                 omit_repeated_times=True,
@@ -222,17 +219,17 @@ def setup_logging() -> None:
                 # locals_max_string=100,
                 log_time_format="[%x %X]",
                 keywords=keywords),
-            logging.FileHandler('AZLOGS/LOG/applogs.log', mode='w', encoding='utf-8', delay=False, errors='ignore')
+            logging.FileHandler('AZLOGS/LOG/applogs.log', mode='a', encoding='utf-8', delay=False, errors='ignore')
         ])
 
 
 def jprint(data, level=logging.INFO):
-    global console
+    global console  # pylint: disable=global-variable-not-assigned
     try:
         pretty = Pretty(data)
         console.print(pretty)
         if level == logging.DEBUG:
-            logger = logging.getLogger(__name__)
+            logger = logging.getLogger(__name__)  # pylint: disable=redefined-outer-name
             logger.debug(data)
             return data
         return data

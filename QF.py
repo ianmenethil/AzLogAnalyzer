@@ -1,11 +1,23 @@
 import logging
-from typing import Dict
-from configurator import load_kql_queries
+from typing import Dict, List
+from configurator import load_kql_queries, load_config_from_file
 # from configLoader import ConfigLoader
 
 logger = logging.getLogger(__name__)
+# # ? IPs
+IP_FILEPATH: str = 'config/IPs.yaml'
+ip_data = load_config_from_file(IP_FILEPATH)
+RAW_WHITELIST_IPs: List[str] = ip_data['WHITELIST']
+WHITELIST_IPs = ", ".join(f"'{ip}'" for ip in RAW_WHITELIST_IPs)
 
-WHITELIST_IPs = ['1.1.1.1', '2.2.2.2']
+RAW_BLACKLIST_IPs: List[str] = ip_data['BLACKLIST']
+BLACKLIST_IPs = ", ".join(f"'{ip}'" for ip in RAW_BLACKLIST_IPs)
+RAW_DYNAMIC_IPs: List[str] = ip_data['DYNAMICLIST']
+DYNAMIC_IPs = ", ".join(f"'{ip}'" for ip in RAW_DYNAMIC_IPs)
+
+logger.info(f"WHITELIST: {WHITELIST_IPs}")
+logger.info(f"BLACKLIST: {BLACKLIST_IPs}")
+logger.info(f"DYNAMIC_IPs: {DYNAMIC_IPs}")
 
 kql_queries: Dict[str, Dict[str, str]] = load_kql_queries()
 
@@ -14,6 +26,7 @@ raw_kql_queries = {
     "KQL_AZDIAG_TIMEBETWEEN": kql_queries["F_AzDiag_TIMEBETWEEN"]["query"],
     "KQL_AZDIAG_IP_TIMEBETWEEN": kql_queries["F_AzDiag_IP_TIMEBETWEEN"]["query"],
     "KQL_AZDIAG_TIMEAGO": kql_queries["F_AzDiag_TIMEAGO"]["query"],
+    "KQL_AZDIAG_CUSTOM_TIMEAGO": kql_queries["F_AzDiag_CUSTOM_TIMEAGO"]["query"],
     "KQL_APPREQ_TIMEAGO": kql_queries["F_AppReq_TIMEAGO"]["query"],
     "KQL_APPPAGE_TIMEAGO": kql_queries["F_AppPage_TIMEAGO"]["query"],
     "KQL_APPBROWSER_TIMEAGO": kql_queries["F_AppBrowser_TIMEAGO"]["query"],
@@ -26,18 +39,7 @@ raw_kql_queries = {
 class QueryFormatter():
 
     @staticmethod
-    def format_query(query_name, ip1=None, ip2=None, timeago=None, iplist=None, start_t=None, end_t=None, whitelist=None, blacklist=None, singleip=None) -> str:  # pylint: disable=unused-argument # noqa: W0613
-        """Formats a query based on the given parameters.
-        Parameters:
-        - query_name: The name of the query.
-        - ip1: The value for IP1 (optional).
-        - ip2: The value for IP2 (optional).
-        - timeago: The value for TIMEAGO (optional).
-        - iplist: The list of IPs (optional).
-        - start_t: The start time (optional).
-        - end_t: The end time (optional).
-        Returns:
-        - str: The formatted query."""
+    def format_query(query_name, ip1=None, ip2=None, timeago=None, iplist=None, start_t=None, end_t=None, whitelist=None, blacklist=None, singleip=None, dynamiclist=None) -> str:  # pylint: disable=unused-argument # noqa: W0613
         query_param_map = {
             "AZDIAG_IP1IP2_TIMEAGO": {
                 "IP1_INFILE": ip1,
@@ -59,6 +61,10 @@ class QueryFormatter():
             "AZDIAG_TIMEAGO": {
                 "TIME_INFILE": timeago,
                 "WHITE_INFILE": WHITELIST_IPs
+            },
+            "AZDIAG_CUSTOM_TIMEAGO": {
+                "TIME_INFILE": timeago,
+                "DYNAMICLIST_INFILE": DYNAMIC_IPs
             },
             "APPREQ_TIMEAGO": {
                 "TIME_INFILE": timeago
