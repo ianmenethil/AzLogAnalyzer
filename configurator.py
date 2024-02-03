@@ -68,7 +68,6 @@ class ExcelConfigurations(TypedDict):
     CL_FINAL_ORDER: List[str]
     EXCLUSION_PAIRS: Dict[str, List[str]]
 
-
 class RegexConfigurations(TypedDict):
     """The class `RegexConfigurations` is a TypedDict that defines the structure of a configuration object for Excel files."""
     AZDIAG_PATTS: List[str]

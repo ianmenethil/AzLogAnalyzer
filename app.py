@@ -11,15 +11,15 @@ import httpx
 from configurator import setup_logging, console, ExcelConfigurations, RegexConfigurations, AppConfigurations, LF
 
 setup_logging()
-from compareHeaders import compare_and_write_output  # pylint: disable=wrong-import-position
-from timeManager import TimeManager  # pylint: disable=wrong-import-position
-from configLoader import ConfigLoader  # pylint: disable=wrong-import-position
-from userInputManager import UserInputHandler  # pylint: disable=wrong-import-position
-from excelManager import ExcelManager  # pylint: disable=wrong-import-position
-# from backupManager import BackupManager  # pylint: disable=wrong-import-position
-from fileManager import FileManager  # pylint: disable=wrong-import-position
-from regexManager import RegexManager  # pylint: disable=wrong-import-position
-from logManager import LogManager  # pylint: disable=wrong-import-position
+from compareHeaders import compare_and_write_output  # pylint: disable=wrong-import-position  # pylint: disable=E402
+from timeManager import TimeManager  # pylint: disable=wrong-import-position  # pylint: disable=E402
+from configLoader import ConfigLoader  # pylint: disable=wrong-import-position  # pylint: disable=E402
+from userInputManager import UserInputHandler  # pylint: disable=wrong-import-position  # pylint: disable=E402
+from excelManager import ExcelManager  # pylint: disable=wrong-import-position  # pylint: disable=E402
+# from backupManager import BackupManager  # pylint: disable=wrong-import-position  # pylint: disable=E402
+from fileManager import FileManager  # pylint: disable=wrong-import-position  # pylint: disable=E402
+from regexManager import RegexManager  # pylint: disable=wrong-import-position  # pylint: disable=E402
+from logManager import LogManager  # pylint: disable=wrong-import-position # pylint: disable=E402
 
 logger = logging.getLogger(__name__)
 get_current_time_info = TimeManager.get_current_time_info
@@ -225,53 +225,30 @@ class DataProcessor():
         except Exception as e:
             logger.error(f'E in process_local_data: {e}', exc_info=True, stack_info=True, extra={'color': 'red'}, stacklevel=2)
 
+    @staticmethod
+    def reorder_sheets(excel_file: str, focused_cols_set: list) -> None:
+        final_sheet_dataframe = pd.read_excel(excel_file, sheet_name='Sheet1')
+        columns_to_include = [col for col in focused_cols_set if col in final_sheet_dataframe.columns]
+        focused_df = final_sheet_dataframe[columns_to_include]
+        wb = load_workbook(excel_file)
 
-def reorder_sheets(excel_file: str, focused_cols_set: list) -> None:
-    final_sheet_dataframe = pd.read_excel(excel_file, sheet_name='Sheet1')
-    columns_to_include = [col for col in focused_cols_set if col in final_sheet_dataframe.columns]
-    focused_df = final_sheet_dataframe[columns_to_include]
-    wb = load_workbook(excel_file)
+        if 'AllData' not in wb.sheetnames:
+            all_data_sheet = wb.create_sheet('AllData')
+            sheet1 = wb['Sheet1']
+            for row in sheet1.iter_rows(values_only=True):
+                all_data_sheet.append(row)
+            del wb['Sheet1']
 
-    if 'AllData' not in wb.sheetnames:
-        all_data_sheet = wb.create_sheet('AllData')
-        sheet1 = wb['Sheet1']
-        for row in sheet1.iter_rows(values_only=True):
-            all_data_sheet.append(row)
-        del wb['Sheet1']
+        wb.save(excel_file)
+        with pd.ExcelWriter(excel_file, engine='openpyxl', mode='a') as writer:
+            focused_df.to_excel(writer, sheet_name='FocusedColumns', index=False)
 
-    wb.save(excel_file)
-    with pd.ExcelWriter(excel_file, engine='openpyxl', mode='a') as writer:
-        focused_df.to_excel(writer, sheet_name='FocusedColumns', index=False)
-
-    wb = load_workbook(excel_file)
-    sheets = wb.sheetnames
-    focused_idx = sheets.index('FocusedColumns')
-    sheets = [sheets.pop(focused_idx)] + sheets  # Move 'FocusedColumns' to the first position
-    wb._sheets = [wb[s] for s in sheets]  # type: ignore
-    wb.save(excel_file)
-
-
-# # ! TIME
-# time_info = get_current_time_info()
-# NOWINSYDNEY: str = time_info['NOWINSYDNEY']
-# NOWINAZURE: str = time_info['NOWINAZURE']
-# TODAY: str = time_info['TODAY']
-# NOWINSYDNEY_FILEFORMAT: str = time_info['NOWINSYDNEY_FILEFORMAT']
-# NOWINAZURE_FILEFORMAT: str = time_info['NOWINAZURE_FILEFORMAT']
-# logger.info(f'Sydney Time {NOWINSYDNEY}')
-# logger.info(f'NOWINAZURE Time {NOWINAZURE}')
-
-# # ! OPTIONS
-# azdiag1 = 'AZDIAG_IP1IP2_TIMEAGO'
-# azdiag2 = 'AZDIAG_TIMEBETWEEN'
-# azdiag3 = 'AZDIAG_IP_TIMEBETWEEN'
-# azdiag4 = 'AZDIAG_TIMEAGO'
-# req1 = 'APPREQ_TIMEAGO'
-# page1 = 'APPPAGE_TIMEAGO'
-# browser1 = 'APPBROWSER_TIMEAGO'
-# httplogs1 = 'HTTPLogs_TIMEAGO'
-# httplogs2 = 'HTTPLogs_TIMEBETWEEN'
-# ipsec1 = 'APPSERVIPSec_TIMEAGO'
+        wb = load_workbook(excel_file)
+        sheets = wb.sheetnames
+        focused_idx = sheets.index('FocusedColumns')
+        sheets = [sheets.pop(focused_idx)] + sheets  # Move 'FocusedColumns' to the first position
+        wb._sheets = [wb[s] for s in sheets]  # type: ignore
+        wb.save(excel_file)
 
 
 def main() -> None:
@@ -302,11 +279,11 @@ def main() -> None:
     AZDIAG_EXCEL_COMBINED: Path = Path(az_config['AZDIAG_EXCEL_COMBINED_FILE'])
     TMPEXCEL: Path = Path(az_config['TEMP_EXCEL_FILE'])
     LOG_FILE: str = az_config['Extraction_LogFILE']
-    TOKEN_URL: str = f'https://login.microsoftonline.com/{TENANT_ID}/oauth2/token'
-    AZLOG_ZEN_ENDPOINT: str = f'{AZLOG_ENDPOINT}{ZEN_WORKSPACE_ID}/query'
+    # TOKEN_URL: str = f'https://login.microsoftonline.com/{TENANT_ID}/oauth2/token'
+    # AZLOG_ZEN_ENDPOINT: str = f'{AZLOG_ENDPOINT}{ZEN_WORKSPACE_ID}/query'
     IP_DIR = 'IPCheck'
-    # AZLOG_ZEN_ENDPOINT: str = 'http://127.0.0.1:5000/query'
-    # TOKEN_URL: str = 'http://127.0.0.1:5000/token'
+    AZLOG_ZEN_ENDPOINT: str = 'http://127.0.0.1:5000/query'
+    TOKEN_URL: str = 'http://127.0.0.1:5000/token'
 
     if Path(JSON_FILE).is_file():
         new_data_choice = input('Get data?')
@@ -350,7 +327,6 @@ def main() -> None:
         RegexManager.filter_df_based_on_patterns(df=data, config_dict=MATCH_VALUE_TO_SPECIFIC_COLUMN, output_dir=OUTPUT_FOLDER)
     except Exception as e:
         logger.error(f'Error in filter_df_based_on_patterns: {e}', exc_info=True, stack_info=True)
-    input('halt')
     try:
         EXCEL_FILE_STR = str(EXCEL_FILE)
         EXCEL_FINAL_FILE_STR = str(EXCEL_FINAL_FILE)
@@ -393,7 +369,6 @@ def main() -> None:
     # cs = os.path.splitext(CSV_FILE)
     # ex = os.path.splitext(EXCEL_FINAL_FILE)
     # COMPARE_HEADER_FILE = str(cs) + '_' + str(ex) + '_compare_headers.xlsx'
-
     # compare_and_write_output(CSV_FILE, EXCEL_FINAL_FILE, COMPARE_HEADER_FILE)
     compare_and_write_output(CSV_FILE, EXCEL_FINAL_FILE)
     LF()
@@ -428,7 +403,7 @@ def main() -> None:
         # 'Pay_ReviewPayment', #
     ]
 
-    reorder_sheets(str(EXCEL_FINAL_FILE), focused_cols_set)
+    DataProcessor.reorder_sheets(str(EXCEL_FINAL_FILE), focused_cols_set)
     logger.info('Sheet order updated successfully.')
 
     # !
