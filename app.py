@@ -7,9 +7,9 @@ from typing import Any, Tuple, List, Dict, cast
 import sys
 from pathlib import Path
 import pandas as pd
+import csv
 import httpx
 from configurator import setup_logging, console, ExcelConfigurations, RegexConfigurations, AppConfigurations, LF
-
 setup_logging()
 from compareHeaders import compare_and_write_output  # pylint: disable=wrong-import-position  # pylint: disable=E402
 from timeManager import TimeManager  # pylint: disable=wrong-import-position  # pylint: disable=E402
@@ -44,9 +44,36 @@ class APIManager():
             LF()
             headers['Content-Type'] = 'application/json'
             response = httpx.post(url=zen_endpoint, data=query, headers=headers, timeout=60)
+
+            log_data = {
+                'URL': response.request.url,
+                'Headers': json.dumps(dict(response.request.headers)),
+                'StatusCode': response.status_code,
+                'ResponseHeaders': json.dumps(dict(response.headers)),
+                'ResponseContent': response.text
+            }
+
+            # Log file path
+            log_file_path = 'AZLOGS/APILogs.csv'
+
+            # Ensure the output directory exists
+            os.makedirs(os.path.dirname(log_file_path), exist_ok=True)
+
+            # Check if the log file exists and write accordingly
+            file_exists = os.path.isfile(log_file_path)
+            with open(log_file_path, 'a', newline='', encoding='utf-8') as csvfile:
+                fieldnames = ['URL', 'Headers', 'StatusCode', 'ResponseHeaders', 'ResponseContent']
+                writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+
+                # Write header only if file did not exist prior
+                if not file_exists:
+                    writer.writeheader()
+                writer.writerow(log_data)
+
             response.raise_for_status()
             logger.info(f"Response Status Code: {response.status_code}")
             return response.json()
+
         except httpx.HTTPError as e:
             logger.error(f"HTTP error occurred: {e}", exc_info=True, stack_info=True, extra={'color': 'red'}, stacklevel=2)
         except Exception as e:
@@ -279,11 +306,11 @@ def main() -> None:
     AZDIAG_EXCEL_COMBINED: Path = Path(az_config['AZDIAG_EXCEL_COMBINED_FILE'])
     TMPEXCEL: Path = Path(az_config['TEMP_EXCEL_FILE'])
     LOG_FILE: str = az_config['Extraction_LogFILE']
-    # TOKEN_URL: str = f'https://login.microsoftonline.com/{TENANT_ID}/oauth2/token'
-    # AZLOG_ZEN_ENDPOINT: str = f'{AZLOG_ENDPOINT}{ZEN_WORKSPACE_ID}/query'
+    TOKEN_URL: str = f'https://login.microsoftonline.com/{TENANT_ID}/oauth2/token'
+    AZLOG_ZEN_ENDPOINT: str = f'{AZLOG_ENDPOINT}{ZEN_WORKSPACE_ID}/query'
     IP_DIR = 'IPCheck'
-    AZLOG_ZEN_ENDPOINT: str = 'http://127.0.0.1:5000/query'
-    TOKEN_URL: str = 'http://127.0.0.1:5000/token'
+    # AZLOG_ZEN_ENDPOINT: str = 'http://127.0.0.1:5000/query'
+    # TOKEN_URL: str = 'http://127.0.0.1:5000/token'
 
     if Path(JSON_FILE).is_file():
         new_data_choice = input('Get data?')
